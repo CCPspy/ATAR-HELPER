@@ -14,15 +14,9 @@
     <!-- KaTeX for Math Rendering -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-    <!-- PDF.js for Database Reading -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    </script>
-
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&family=Caveat:wght@700&display=swap');
         
@@ -72,28 +66,72 @@
             box-shadow: 0 0 25px rgba(34, 211, 238, 0.3);
             text-shadow: 0 0 8px rgba(34, 211, 238, 0.8);
         }
-        .premium-btn:active:not(:disabled) { transform: scale(0.98); }
-        .premium-btn:disabled { opacity: 0.5; cursor: wait; }
+        .premium-btn:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+        .premium-btn:disabled {
+            opacity: 0.5;
+            cursor: wait;
+        }
 
-        /* Loaders & Spinners */
-        .loader-ring { display: inline-block; position: relative; width: 64px; height: 64px; }
-        .loader-ring div { box-sizing: border-box; display: block; position: absolute; width: 50px; height: 50px; margin: 8px; border: 4px solid #22d3ee; border-radius: 50%; animation: loader-ring 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite; border-color: #22d3ee transparent transparent transparent; }
+        /* Loaders */
+        .loader-ring {
+            display: inline-block;
+            position: relative;
+            width: 64px;
+            height: 64px;
+        }
+        .loader-ring div {
+            box-sizing: border-box;
+            display: block;
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            margin: 8px;
+            border: 4px solid #22d3ee;
+            border-radius: 50%;
+            animation: loader-ring 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+            border-color: #22d3ee transparent transparent transparent;
+        }
         .loader-ring div:nth-child(1) { animation-delay: -0.45s; }
         .loader-ring div:nth-child(2) { animation-delay: -0.3s; }
         .loader-ring div:nth-child(3) { animation-delay: -0.15s; }
-        @keyframes loader-ring { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes loader-ring {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
 
-        @keyframes spin-border { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .spin-border { position: relative; z-index: 0; }
-        .spin-border::before { content: ''; position: absolute; inset: -2px; border-radius: 50%; padding: 2px; background: conic-gradient(from 0deg, transparent, #22d3ee, transparent); -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; animation: spin-border 1.5s linear infinite; z-index: -1; }
+        /* Spinning Border for Sidebar */
+        @keyframes spin-border {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .spin-border {
+            position: relative;
+            z-index: 0;
+        }
+        .spin-border::before {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            border-radius: 50%;
+            padding: 2px;
+            background: conic-gradient(from 0deg, transparent, #22d3ee, transparent);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            animation: spin-border 1.5s linear infinite;
+            z-index: -1;
+        }
 
         .animate-fade-in { animation: fadeIn 0.5s ease-out forwards; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* Custom Scroll & Range */
+        /* Custom Range Slider */
         input[type=range] { -webkit-appearance: none; background: transparent; }
         input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: #22d3ee; margin-top: -6px; cursor: pointer; }
         input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: rgba(255,255,255,0.2); border-radius: 2px; }
+        
         .custom-scroll::-webkit-scrollbar { width: 4px; }
         .custom-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
     </style>
@@ -104,9 +142,6 @@
     <script type="text/babel">
         const { useState, useEffect, useRef, useMemo, memo, useCallback } = React;
 
-        // --- GLOBAL CONTEXT STORE (For PDFs) ---
-        let SUBJECT_CONTEXT = ""; 
-
         // --- CURRICULUM DATA ---
         const CURRICULUM = {
             "Methods": { "Year 11": { "Unit 1": ["Functions", "Trig", "Prob"], "Unit 2": ["Calculus", "Exp/Log", "Series"] }, "Year 12": { "Unit 3": ["Calculus II", "Integrals", "Random Var"], "Unit 4": ["Logarithms", "Continuous Var", "Stats"] } },
@@ -115,107 +150,66 @@
             "Chem": { "Year 11": { "Unit 1": ["Atomic", "Bonding", "Organic"], "Unit 2": ["Forces", "Solutions", "Gases"] }, "Year 12": { "Unit 3": ["Equilibrium", "Acids", "Redox"], "Unit 4": ["Organic II", "Polymers", "Synthesis"] } }
         };
 
-        // --- AI ENGINE ---
+        // --- ROBUST AI ENGINE ---
         const AI_ENGINE = {
-            // Check if DB exists by probing 1.pdf
-            checkDatabase: async (subject, level) => {
-                try {
-                    const res = await fetch(`data/${subject}/${level}/1.pdf`);
-                    return res.ok;
-                } catch { return false; }
-            },
-
-            loadContext: async (subject, level) => {
-                SUBJECT_CONTEXT = "";
-                let context = "";
-                // Try reading 1.pdf, 2.pdf (Max 2 files to keep generation fast)
-                for (let i = 1; i <= 2; i++) {
-                    try {
-                        const url = `data/${subject}/${level}/${i}.pdf`;
-                        const res = await fetch(url);
-                        if (!res.ok) break;
-                        
-                        const blob = await res.blob();
-                        const arrayBuffer = await blob.arrayBuffer();
-                        const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
-                        
-                        // Only read first 2 pages per PDF to save tokens/time
-                        for(let p=1; p<=Math.min(pdf.numPages, 2); p++) {
-                            const page = await pdf.getPage(p);
-                            const textContent = await page.getTextContent();
-                            context += textContent.items.map(item => item.str).join(" ") + " ";
-                        }
-                    } catch (e) { break; }
-                }
-                // Limit context size
-                SUBJECT_CONTEXT = context.substring(0, 1500); 
-                console.log("Loaded Context Length:", SUBJECT_CONTEXT.length);
-            },
-
+            // Use POST with a simple text endpoint for stability
             fetchWithRetry: async (prompt, jsonMode = false) => {
                 const seed = Math.floor(Math.random() * 1000000);
-                const url = `https://text.pollinations.ai/`;
-                const body = `${prompt}\n\n(Seed: ${seed})`;
+                const url = `https://text.pollinations.ai/${encodeURIComponent(prompt)}?seed=${seed}${jsonMode ? '&json=true' : ''}&model=openai`;
                 
                 try {
-                    const response = await fetch(`${url}?model=openai${jsonMode ? '&json=true' : ''}`, {
-                        method: 'POST',
-                        headers: {'Content-Type': 'text/plain'},
-                        body: body
-                    });
-                    if (!response.ok) throw new Error("HTTP Error");
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error("Network error");
                     return await response.text();
                 } catch (e) {
+                    console.warn("Primary model failed, trying backup...");
                     try {
-                        const response2 = await fetch(`${url}?model=mistral${jsonMode ? '&json=true' : ''}`, {
-                            method: 'POST',
-                            headers: {'Content-Type': 'text/plain'},
-                            body: body
-                        });
-                        if (!response2.ok) throw new Error("Backup Failed");
+                        // Backup model
+                        const response2 = await fetch(`https://text.pollinations.ai/${encodeURIComponent(prompt)}?seed=${seed}&model=mistral`);
+                        if (!response2.ok) throw new Error("Backup failed");
                         return await response2.text();
-                    } catch(e2) { throw new Error("AI Offline"); }
+                    } catch (e2) {
+                        throw new Error("AI unavailable");
+                    }
                 }
             },
 
             generateQuestion: async (subject, level, topics) => {
                 const topic = topics.length > 0 ? topics[Math.floor(Math.random() * topics.length)] : subject;
-                const contextStr = SUBJECT_CONTEXT ? `Reference Material (Use this style but create NEW question): ${SUBJECT_CONTEXT}` : "";
-                
-                const prompt = `Create a WACE ATAR exam question for ${subject} ${level} - ${topic}.
-                ${contextStr}
-                INSTRUCTIONS:
-                1. Return raw JSON: {"text":"Question...","topic":"${topic}","answer":"Short Answer","hint":"Hint"}.
-                2. Use LaTeX for math like $x^2$.
-                3. NO words like 'space', 'blank', 'page'.
-                4. NO sub-questions (a,b,c). One single question only.`;
+                const prompt = `Create a single-part exam question for ${subject} ${level} on ${topic}.
+                Output raw JSON only: {"text":"Question here with LaTeX $...$","topic":"${topic}","answer":"Short Answer LaTeX","hint":"Hint"}.
+                No sub-questions (a,b,c). No markdown blocks.`;
                 
                 try {
                     const text = await AI_ENGINE.fetchWithRetry(prompt, true);
                     const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
                     const start = cleanText.indexOf('{');
                     const end = cleanText.lastIndexOf('}');
-                    if (start === -1 || end === -1) throw new Error("JSON Error");
+                    if (start === -1 || end === -1) throw new Error("No JSON");
                     return JSON.parse(cleanText.substring(start, end+1));
                 } catch (e) {
-                    return {
-                        text: "Error generating. Please check internet. (Fallback: Evaluate $\\int 2x dx$)",
-                        topic: "System",
-                        answer: "x^2 + C",
-                        hint: "Power rule."
+                    // Robust Local Fallbacks
+                    const fallbacks = {
+                        "Methods": { text: "Determine the derivative of $f(x) = x^2 e^x$.", topic: "Calculus", answer: "$x e^x (2 + x)$", hint: "Use Product Rule." },
+                        "Physics": { text: "Calculate the kinetic energy of a 2kg mass moving at 4m/s.", topic: "Energy", answer: "$16 J$", hint: "$E_k = 1/2 m v^2$" },
+                        "Spec": { text: "Convert $z = 1 + i$ to polar form.", topic: "Complex", answer: "$\\sqrt{2} cis(\\frac{\\pi}{4})$", hint: "Find modulus and argument." },
+                        "Chem": { text: "Calculate the pH of 0.01M HCl.", topic: "Acids", answer: "$2$", hint: "$-\\log[H^+]$" }
                     };
+                    const fb = fallbacks[subject] || fallbacks["Methods"];
+                    return { ...fb, text: `(Offline) ${fb.text}` };
                 }
             },
 
             checkAnswer: async (user, actual, questionText) => {
                 try {
-                    const prompt = `Q: ${questionText}\nReal Ans: ${actual}\nStudent Ans: ${user}\nIs correct? Return JSON: {"correct": true/false, "feedback": "Brief LaTeX feedback"}`;
+                    const prompt = `Question: ${questionText}\nReal Answer: ${actual}\nStudent Answer: ${user}\nIs the student correct? Return JSON: {"correct": true/false, "feedback": "Brief reason with LaTeX"}`;
                     const text = await AI_ENGINE.fetchWithRetry(prompt, true);
                     const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
                     const start = cleanText.indexOf('{');
                     const end = cleanText.lastIndexOf('}');
                     return JSON.parse(cleanText.substring(start, end+1));
                 } catch(e) {
+                    // Simple string check fallback
                     const isMatch = user.replace(/\s/g,'') === actual.replace(/\s/g,'');
                     return { correct: isMatch, feedback: isMatch ? "Exact match found." : "Connection failed, tried exact match." };
                 }
@@ -223,27 +217,35 @@
 
             ask: async (prompt, systemContext) => {
                 try {
-                    return await AI_ENGINE.fetchWithRetry(`System: ${systemContext}. User: ${prompt}. Reply concisely with LaTeX.`, false);
-                } catch(e) { return "Connection failed."; }
+                    const fullPrompt = `System: ${systemContext}. User: ${prompt}. Reply concisely with LaTeX.`;
+                    return await AI_ENGINE.fetchWithRetry(fullPrompt, false);
+                } catch (e) {
+                    return "Connection to AI failed. Please check internet.";
+                }
             }
         };
 
-        // --- MATH RENDERER ---
+        // --- MATH RENDERER (Smart Formatting) ---
         const MathText = ({ text }) => {
             if (!text) return null;
+            
+            // Clean text and inject $ signs for math-like patterns if missing
             let cleanText = text
                 .replace(/Leave space for working/gi, '')
-                .replace(/(?<!\\)\bspace\b/gi, ' ')
-                .replace(/\\n/g, '\n'); 
+                .replace(/(\bspace\b)/gi, ' ')
+                .replace(/(\bblank\b)/gi, ' ');
+
+            // Detect common LaTeX patterns not wrapped in $ and wrap them
+            cleanText = cleanText.replace(/(\\frac\{.*?\}\{.*?\}|\\times|\\sqrt\{.*?\}|\^\{.*?\})(?!\$)/g, (match) => `$${match}$`);
 
             const parts = cleanText.split(/(\$[^$]+\$)/g);
             return (
-                <div className="leading-relaxed tracking-normal font-sans whitespace-pre-wrap text-lg">
+                <div className="leading-relaxed tracking-normal font-sans whitespace-pre-wrap break-words text-lg">
                     {parts.map((part, index) => {
                         if (part.startsWith('$') && part.endsWith('$')) {
                             const mathContent = part.slice(1, -1);
                             return (
-                                <span key={index} className="mx-1 inline-block text-cyan-200 align-middle"
+                                <span key={index} className="mx-1 inline-block text-cyan-200"
                                     dangerouslySetInnerHTML={{ __html: katex.renderToString(mathContent, { throwOnError: false, displayMode: false }) }} 
                                 />
                             );
@@ -254,12 +256,12 @@
             );
         };
 
-        // --- VISUALS ---
-        const EasterEggBackground = memo(() => {
+        // --- VISUAL COMPONENTS ---
+        const EasterEggBackground = memo(({ active }) => {
             const [items, setItems] = useState([]);
             useEffect(() => {
-                setItems(Array.from({ length: 15 }, (_, i) => ({
-                    id: i, char: ["∫", "∑", "π", "e", "θ"][i%5],
+                setItems(Array.from({ length: 20 }, (_, i) => ({
+                    id: i, char: ["∫", "∑", "π", "e", "θ", "λ"][i%6],
                     x: Math.random() * 90, y: Math.random() * 90,
                     vx: (Math.random()-0.5)*0.2, vy: (Math.random()-0.5)*0.2
                 })));
@@ -288,7 +290,8 @@
         const Whiteboard = memo(({ tool, color, size, triggerClear, teacherMarks, hasDrawnRef }) => {
             const canvasRef = useRef(null);
             const contextRef = useRef(null);
-            
+            const [isDrawing, setIsDrawing] = useState(false);
+
             useEffect(() => {
                 const canvas = canvasRef.current;
                 const dpr = window.devicePixelRatio || 1;
@@ -324,31 +327,30 @@
                 }
             }, [teacherMarks]);
 
-            const startDrawing = (e) => {
+            const getPos = (e) => {
                 const rect = canvasRef.current.getBoundingClientRect();
-                const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-                const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
-                contextRef.current.beginPath(); contextRef.current.moveTo(x,y);
-                if(hasDrawnRef) hasDrawnRef.current = true;
-                
-                const moveHandler = (ev) => {
-                    const mx = (ev.touches ? ev.touches[0].clientX : ev.clientX) - rect.left;
-                    const my = (ev.touches ? ev.touches[0].clientY : ev.clientY) - rect.top;
-                    const ctx = contextRef.current;
-                    if (tool === 'eraser') { ctx.globalCompositeOperation = 'destination-out'; ctx.lineWidth = size * 5; } 
-                    else { ctx.globalCompositeOperation = 'source-over'; ctx.lineWidth = size; ctx.strokeStyle = color; }
-                    ctx.lineTo(mx, my); ctx.stroke();
-                };
-                
-                const upHandler = () => {
-                    window.removeEventListener(e.touches ? 'touchmove' : 'mousemove', moveHandler);
-                    window.removeEventListener(e.touches ? 'touchend' : 'mouseup', upHandler);
-                };
-                window.addEventListener(e.touches ? 'touchmove' : 'mousemove', moveHandler);
-                window.addEventListener(e.touches ? 'touchend' : 'mouseup', upHandler);
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return { x: clientX - rect.left, y: clientY - rect.top };
             };
 
-            return <canvas ref={canvasRef} onMouseDown={startDrawing} onTouchStart={startDrawing} className="w-full h-full cursor-crosshair touch-none" style={{ background: 'transparent' }} />;
+            const startDrawing = (e) => {
+                contextRef.current.beginPath(); 
+                const {x,y} = getPos(e); contextRef.current.moveTo(x,y);
+                setIsDrawing(true);
+                if(hasDrawnRef) hasDrawnRef.current = true;
+            };
+
+            const draw = (e) => {
+                if (!isDrawing) return;
+                const { x, y } = getPos(e);
+                const ctx = contextRef.current;
+                if (tool === 'eraser') { ctx.globalCompositeOperation = 'destination-out'; ctx.lineWidth = size * 5; } 
+                else { ctx.globalCompositeOperation = 'source-over'; ctx.lineWidth = size; ctx.strokeStyle = color; }
+                ctx.lineTo(x, y); ctx.stroke();
+            };
+
+            return <canvas ref={canvasRef} onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={()=>setIsDrawing(false)} onMouseLeave={()=>setIsDrawing(false)} onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={()=>setIsDrawing(false)} className="w-full h-full cursor-crosshair touch-none" style={{ background: 'transparent' }} />;
         });
 
         const Modal = ({ isOpen, message, onConfirm, onCancel, confirmText="Yes" }) => {
@@ -402,9 +404,9 @@
                         <div className="mb-6 p-4 bg-white/5 rounded-xl">
                             <div className="text-sm text-slate-400 uppercase tracking-wider mb-2">Tutor Summary</div>
                             <p className="text-sm text-slate-300 italic">
-                                {score > 80 ? `Outstanding work, ${user}! You have demonstrated mastery.` : 
-                                 score > 50 ? `Good effort, ${user}. Review ${uniqueWeaknesses[0] || 'your errors'} to improve.` : 
-                                 `Keep practicing, ${user}. Focus on understanding the core concepts.`}
+                                {score > 80 ? `Outstanding work, ${user}! You have demonstrated mastery in these topics.` : 
+                                 score > 50 ? `Good effort, ${user}. Review ${uniqueWeaknesses[0] || 'your errors'} to improve further.` : 
+                                 `Keep practicing, ${user}. Focus on understanding the core concepts of ${subject}.`}
                             </p>
                         </div>
 
@@ -423,7 +425,6 @@
             const [user, setUser] = useState('');
             const [subject, setSubject] = useState('Methods');
             const [level, setLevel] = useState('Year 12');
-            const [dbStatus, setDbStatus] = useState(false); // Database connected?
             
             // Setup
             const [selectedUnit, setSelectedUnit] = useState('Whole Year');
@@ -436,7 +437,7 @@
             const [currentQIndex, setCurrentQIndex] = useState(0);
             const [messages, setMessages] = useState([]);
             const [chatInput, setChatInput] = useState('');
-            const [isProcessing, setIsProcessing] = useState(false); 
+            const [isProcessing, setIsProcessing] = useState(false); // New global processing lock
             
             // Tools
             const [wbTool, setWbTool] = useState('pen');
@@ -445,22 +446,17 @@
             const [clearBoardTrig, setClearBoardTrig] = useState(0);
             const [teacherMarks, setTeacherMarks] = useState([]);
             const hasDrawn = useRef(false);
-            const genPaused = useRef(false);
             
-            // Timers
+            // Loading / Timers
             const [isLoadingInitial, setIsLoadingInitial] = useState(false);
             const [loadingTime, setLoadingTime] = useState(0);
             const [timer, setTimer] = useState(0);
             const [modalConfig, setModalConfig] = useState(null);
+            
+            // User Answers
             const [userTypedAns, setUserTypedAns] = useState('');
 
-            // Init & DB Check
-            useEffect(() => {
-                // Check if 1.pdf exists for the default subject
-                AI_ENGINE.checkDatabase('Methods', 'Year 12').then(s => setDbStatus(s));
-            }, []);
-
-            // Update Topics
+            // Init Topics
             useEffect(() => {
                 const yearData = CURRICULUM[subject]?.[level];
                 if (yearData) {
@@ -470,14 +466,9 @@
                     setAvailableTopics(topics);
                     setSelectedTopics(topics);
                 }
-                // Check DB for this specific subject
-                AI_ENGINE.checkDatabase(subject, level).then(s => {
-                    setDbStatus(s);
-                    if(s) AI_ENGINE.loadContext(subject, level);
-                });
             }, [subject, level, selectedUnit]);
 
-            // Timer Logic
+            // Timer: Test Duration
             useEffect(() => {
                 let interval;
                 const currentQ = questions[currentQIndex];
@@ -487,10 +478,14 @@
                 return () => clearInterval(interval);
             }, [view, questions, currentQIndex]);
 
+            // Timer: Loading
             useEffect(() => {
                 let interval;
-                if (isLoadingInitial) interval = setInterval(() => setLoadingTime(t => t + 0.1), 100);
-                else setLoadingTime(0);
+                if (isLoadingInitial) {
+                    interval = setInterval(() => setLoadingTime(t => t + 0.1), 100);
+                } else {
+                    setLoadingTime(0);
+                }
                 return () => clearInterval(interval);
             }, [isLoadingInitial]);
 
@@ -503,9 +498,7 @@
                 setView('test');
 
                 for (let i = 1; i < count; i++) {
-                    await new Promise(r => setTimeout(r, 2000));
-                    while(genPaused.current) await new Promise(r => setTimeout(r, 1000));
-                    
+                    await new Promise(r => setTimeout(r, 1500)); // Pacing
                     const q = await AI_ENGINE.generateQuestion(subject, level, topics);
                     setQuestions(prev => {
                         const n = [...prev]; 
@@ -521,37 +514,38 @@
                 setMessages([{role: 'system', text: `Hi ${user}, good luck! Use the board.`}]);
                 setTeacherMarks([]); setClearBoardTrig(p => p+1); hasDrawn.current = false;
                 setTimer(0); setCurrentQIndex(0); setUserTypedAns('');
+                
                 await backgroundGenerator(questionCount, selectedTopics);
             };
 
             const handleEvaluate = async () => {
                 if (isProcessing) return;
                 setIsProcessing(true);
-                genPaused.current = true;
                 
                 const q = questions[currentQIndex];
-                setMessages(prev => [...prev, { role: 'ai', text: "Checking working..." }]);
+                setMessages(prev => [...prev, { role: 'ai', text: "Evaluating working..." }]);
                 
+                // Visual Simulation
                 setTimeout(async () => {
                     if (!hasDrawn.current) {
+                        setMessages(prev => [...prev, { role: 'ai', text: "Board is empty. I can't check working yet." }]);
+                        // Generate a hint
                         const hint = await AI_ENGINE.ask("Board empty. Give first step hint.", `Q: ${q.text}`);
                         setMessages(prev => [...prev, { role: 'ai', text: hint }]);
                     } else {
-                        const feedback = await AI_ENGINE.ask("Student has working. Give encouragement.", `Q: ${q.text}`);
+                        const feedback = await AI_ENGINE.ask("The student has written working. Provide a generic encouraging check and a hint.", `Q: ${q.text}`);
                         setMessages(prev => [...prev, { role: 'ai', text: feedback }]);
                     }
                     setIsProcessing(false);
-                    genPaused.current = false;
                 }, 1000);
             };
 
             const handleSubmitAnswer = async () => {
                 if(!userTypedAns.trim() || isProcessing) return;
                 setIsProcessing(true);
-                genPaused.current = true;
                 
                 const q = questions[currentQIndex];
-                setMessages(prev => [...prev, { role: 'user', text: `Submitted: ${userTypedAns}` }, { role: 'ai', text: "Verifying..." }]);
+                setMessages(prev => [...prev, { role: 'user', text: `Submitted: ${userTypedAns}` }, { role: 'ai', text: "Checking answer..." }]);
 
                 const check = await AI_ENGINE.checkAnswer(userTypedAns, q.answer, q.text);
                 
@@ -561,14 +555,13 @@
                     setTeacherMarks([{ type: 'tick', x: window.innerWidth*0.4, y: window.innerHeight*0.4 }]);
                     setQuestions(prev => { const n = [...prev]; n[currentQIndex].status = 'correct'; return n; });
                 } else {
+                    // Wrong answer doesn't lock it, allows retry or give up
                     setTeacherMarks([{ type: 'cross', x: window.innerWidth*0.4, y: window.innerHeight*0.4 }]);
                 }
                 setIsProcessing(false);
-                genPaused.current = false;
             };
 
             const handleGiveUp = () => {
-                genPaused.current = true;
                 setModalConfig({
                     message: "Give up? Answer will be shown.",
                     confirmText: "Yes",
@@ -580,16 +573,14 @@
                         });
                         setTeacherMarks([{ type: 'cross', x: window.innerWidth*0.4, y: window.innerHeight*0.4 }]);
                         setModalConfig(null);
-                        genPaused.current = false;
                     },
-                    onCancel: () => { setModalConfig(null); genPaused.current = false; }
+                    onCancel: () => setModalConfig(null)
                 });
             };
 
             const handleSendMessage = async () => {
                 if (!chatInput.trim() || isProcessing) return;
                 setIsProcessing(true);
-                genPaused.current = true;
                 const txt = chatInput;
                 setChatInput('');
                 setMessages(prev => [...prev, { role: 'user', text: txt }, { role: 'ai', text: "..." }]);
@@ -601,13 +592,13 @@
                     const n = [...prev]; n.pop(); return [...n, { role: 'ai', text: res }];
                 });
                 setIsProcessing(false);
-                genPaused.current = false;
             };
 
             const changeQuestion = (idx) => {
                 if (questions[idx].status === 'generating' || isProcessing) return;
                 setCurrentQIndex(idx);
                 setTeacherMarks([]); setClearBoardTrig(p => p+1); hasDrawn.current = false; setUserTypedAns('');
+                // If moving to a new question, clear marks
             };
 
             const allDone = questions.every(q => q.status === 'correct' || q.status === 'wrong');
@@ -620,20 +611,10 @@
                 <div className="h-screen w-screen flex flex-col items-center justify-center p-4 relative">
                     <div className="z-10 w-full max-w-lg glass-panel rounded-3xl p-10 animate-fade-in">
                         <h1 className="text-5xl font-bold bg-gradient-to-br from-cyan-300 via-blue-500 to-purple-600 bg-clip-text text-transparent mb-2 text-center">ATAR Helper</h1>
-                        <div className="flex justify-between text-xs opacity-70 mb-8 px-4">
-                            <span className="tracking-widest">BY ERIC</span>
-                            <span>WILLETTON SHS</span>
-                        </div>
+                        <div className="flex justify-between text-xs opacity-70 mb-8 px-4"><span className="tracking-widest">BY ERIC</span><span>WILLETTON SHS</span></div>
                         <input type="text" value={user} onChange={e => setUser(e.target.value)} className="w-full glass-input rounded-xl px-5 py-4 mb-4" placeholder="Enter Name..." />
                         <button onClick={() => user ? setView('setup') : alert("Enter name")} className="w-full premium-btn text-white font-bold py-4 rounded-xl">Start Session</button>
                     </div>
-                    {/* Database Notice - Separate from Main Title */}
-                    {!dbStatus && (
-                        <div className="absolute top-10 left-10 glass-panel p-3 rounded-xl animate-fade-in border border-red-500/20 flex items-center gap-2">
-                            <i className="fa-solid fa-database text-red-400"></i>
-                            <span className="text-xs text-slate-300">No Database Detected (Using Cloud)</span>
-                        </div>
-                    )}
                     <div className="absolute bottom-4 text-[10px] text-slate-600 font-light select-none opacity-60">© {new Date().getFullYear()} ATAR Helper. All Rights Reserved.</div>
                 </div>
             );
@@ -733,6 +714,7 @@
 
                     {/* WORKSPACE */}
                     <div className="flex-1 flex flex-col relative">
+                        {/* Toolbar */}
                         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-2">
                             <div className="glass-panel rounded-full px-4 py-2 flex items-center gap-4">
                                 <button onClick={() => setWbTool('pen')} className={`${wbTool==='pen'?'text-cyan-400':'text-slate-400'}`}><i className="fa-solid fa-pen"></i></button>
@@ -787,12 +769,12 @@
                                     {isGraded ? (
                                         <button onClick={() => currentQIndex < questions.length - 1 ? changeQuestion(currentQIndex + 1) : null}
                                             disabled={currentQIndex >= questions.length - 1}
-                                            className="premium-btn bg-purple-500/20 text-purple-300 font-bold py-2 px-6 rounded-lg shadow-lg disabled:opacity-50">
+                                            className="bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 px-6 rounded-lg shadow-lg disabled:opacity-50">
                                             Next Q
                                         </button>
                                     ) : (
                                         <button onClick={handleSubmitAnswer} disabled={isProcessing}
-                                            className="premium-btn bg-cyan-500/20 text-cyan-300 font-bold py-2 px-6 rounded-lg shadow-lg disabled:opacity-50">
+                                            className="bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-2 px-6 rounded-lg shadow-lg disabled:opacity-50">
                                             Submit
                                         </button>
                                     )}
@@ -818,8 +800,8 @@
                                 <button onClick={() => setView('report')} className="w-full mb-3 bg-gradient-to-r from-yellow-600 to-orange-600 text-white font-bold py-3 rounded-lg shadow-lg">Finish Test</button>
                             ) : (
                                 <div className="grid grid-cols-2 gap-2 mb-3">
-                                    <button onClick={handleGiveUp} disabled={isQLoading || isGraded || isProcessing} className="premium-btn bg-slate-700/50 text-slate-300 py-2 rounded-lg text-sm hover:bg-slate-600 disabled:opacity-50">Give Up</button>
-                                    <button onClick={handleEvaluate} disabled={isQLoading || isGraded || isProcessing} className="premium-btn bg-emerald-600/50 text-white py-2 rounded-lg text-sm hover:bg-emerald-500 disabled:opacity-50">Evaluate</button>
+                                    <button onClick={handleGiveUp} disabled={isQLoading || isGraded || isProcessing} className="bg-slate-700 text-slate-300 py-2 rounded-lg text-sm hover:bg-slate-600 disabled:opacity-50">Give Up</button>
+                                    <button onClick={handleEvaluate} disabled={isQLoading || isGraded || isProcessing} className="bg-emerald-600 text-white py-2 rounded-lg text-sm hover:bg-emerald-500 disabled:opacity-50">Evaluate</button>
                                 </div>
                             )}
                             <div className="flex gap-2">
@@ -837,27 +819,3 @@
     </script>
 </body>
 </html>
-```
-
-### **2. Setup Instructions for GitHub (Database Feature)**
-
-To enable the PDF reading capability, follow these steps exactly:
-
-1.  **Repository Structure:**
-    In your GitHub repository, create a folder named `data`. Inside it, create folders for each subject and year level exactly matching this structure:
-
-    ```
-    /data
-      /Methods
-        /Year 11
-          1.pdf
-          2.pdf
-        /Year 12
-          1.pdf
-      /Spec
-        /Year 11
-        /Year 12
-      /Physics
-        ...
-      /Chem
-        ...
