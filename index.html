@@ -205,14 +205,13 @@
                 try {
                     const prompt = `Role: WACE ATAR Exam Writer. Subject: ${subject} ${level} - ${topic}.
                     ${SUBJECT_CONTEXT ? 'Context: ' + SUBJECT_CONTEXT.substring(0, 3000) : ''}
-                    Task: Generate a single exam question.
+                    Task: Generate a challenging single-part question with specific marks assigned (default 3).
                     Output: JSON ONLY. Format: 
                     {"text":"Question (LaTeX $...$)","topic":"${topic}","answer":"Short Answer","hint":"Hint", "marks": 3}.
                     Constraints:
                     1. No sub-questions (a, b). 
                     2. No words like 'space', 'blank page'.
-                    3. Ensure LaTeX is clean (no \\begin{enumerate}).
-                    4. Assign a mark value (usually 2-5).`;
+                    3. Ensure LaTeX is clean (no \\begin{enumerate}).`;
                     
                     const text = await AI_ENGINE.callGemini(prompt, null, true);
                     return JSON.parse(text);
@@ -272,7 +271,7 @@
             }
         };
 
-        // --- MATH RENDERER ---
+        // --- MATH RENDERER (Cleaned & Improved) ---
         const MathText = ({ text }) => {
             if (!text) return null;
             let clean = text
@@ -280,8 +279,12 @@
                 .replace(/(\bspace\b)/gi, ' ')
                 .replace(/\\begin\{enumerate\}/g, '')
                 .replace(/\\end\{enumerate\}/g, '')
-                .replace(/\\item/g, '•')
+                .replace(/\\item/g, '\n• ')
                 .replace(/\\/g, '\\'); 
+            
+            // Fix squashed words
+            clean = clean.replace(/([a-zA-Z])(\$)/g, '$1 $2').replace(/(\$)([a-zA-Z])/g, '$1 $2');
+
             const parts = clean.split(/(\$[^$]+\$)/g);
             return (
                 <div className="text-lg leading-relaxed font-sans text-slate-200">
@@ -329,7 +332,7 @@
                     ctx.save(); 
                     teacherMarks.forEach((m) => {
                         ctx.strokeStyle = m.type === 'tick' ? '#10b981' : '#ef4444';
-                        ctx.lineWidth = 4; ctx.beginPath();
+                        ctx.lineWidth = 5; ctx.beginPath();
                         if(m.type === 'tick') { ctx.moveTo(m.x, m.y); ctx.lineTo(m.x+15, m.y+30); ctx.lineTo(m.x+50, m.y-40); }
                         else { ctx.moveTo(m.x, m.y); ctx.lineTo(m.x+40, m.y+40); ctx.moveTo(m.x+40, m.y); ctx.lineTo(m.x, m.y+40); }
                         ctx.stroke();
@@ -418,21 +421,22 @@
                 questions.forEach((q, i) => {
                     if (y > 270) { doc.addPage(); y = 20; }
                     doc.setFont("helvetica", "bold");
-                    doc.text(`Q${i+1} [${q.topic}] - ${q.userMark}/${q.maxMarks}`, 20, y);
+                    doc.text(`Q${i+1} [${q.topic}] - ${q.userMark || 0}/${q.maxMarks || 3}`, 20, y);
                     y += 7;
                     doc.setFont("helvetica", "normal");
-                    const qText = doc.splitTextToSize(`Q: ${q.text.substring(0, 100)}...`, 170);
+                    const qText = doc.splitTextToSize(`Question: ${q.text.substring(0, 200).replace(/\$/g, '')}`, 170);
                     doc.text(qText, 20, y);
                     y += qText.length * 5 + 2;
                     doc.setTextColor(100);
-                    doc.text(`Feedback: ${q.feedback?.improvements || 'None'}`, 20, y);
+                    const fb = q.feedback?.improvements ? `Feedback: ${q.feedback.improvements}` : "Feedback: Not attempted/Graded";
+                    const fbText = doc.splitTextToSize(fb, 170);
+                    doc.text(fbText, 20, y);
                     doc.setTextColor(0);
-                    y += 15;
+                    y += fbText.length * 5 + 10;
                 });
 
                 doc.save(`Report_${user}.pdf`);
             };
-
             return (
                 <div className="absolute inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4 animate-fade-in">
                     <div className="glass-panel p-8 rounded-3xl max-w-2xl w-full border border-white/10">
@@ -627,6 +631,7 @@
 
             if (view === 'setup') return (
                 <div className="fixed inset-0 flex items-center justify-center p-4">
+                    {loading && <LoadingOverlay />}
                     <div className="glass-panel p-8 rounded-3xl w-full max-w-2xl animate-fade-in">
                         <h2 className="text-2xl font-bold text-white mb-6">Setup</h2>
                         <div className="grid grid-cols-2 gap-4 mb-6">
@@ -647,6 +652,7 @@
 
             if (view === 'topics') return (
                 <div className="fixed inset-0 flex items-center justify-center p-4">
+                    {loading && <LoadingOverlay />}
                     <div className="glass-panel p-8 rounded-3xl w-full max-w-2xl animate-fade-in flex flex-col max-h-[90vh]">
                         <h2 className="text-2xl font-bold text-white mb-4">Topics</h2>
                         <div className="flex gap-2 mb-4">
