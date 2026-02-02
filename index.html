@@ -19,8 +19,6 @@
     <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Markdown -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&family=Caveat:wght@700&display=swap');
@@ -36,9 +34,9 @@
 
         /* Glassmorphism Classes */
         .glass-panel {
-            background: rgba(15, 23, 42, 0.25);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
+            background: rgba(15, 23, 42, 0.35); /* Increased visibility */
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
             border: 1px solid rgba(255, 255, 255, 0.08);
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
         }
@@ -68,7 +66,15 @@
         .premium-btn:active:not(:disabled) { transform: scale(0.98); }
         .premium-btn:disabled { opacity: 0.5; cursor: wait; }
 
-        /* Animations */
+        /* Perfect Circular Loader */
+        .loader-ring { display: inline-block; position: relative; width: 64px; height: 64px; }
+        .loader-ring div { box-sizing: border-box; display: block; position: absolute; width: 50px; height: 50px; margin: 7px; border: 4px solid #22d3ee; border-radius: 50%; animation: loader-ring 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite; border-color: #22d3ee transparent transparent transparent; }
+        .loader-ring div:nth-child(1) { animation-delay: -0.45s; }
+        .loader-ring div:nth-child(2) { animation-delay: -0.3s; }
+        .loader-ring div:nth-child(3) { animation-delay: -0.15s; }
+        @keyframes loader-ring { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Spinning Border */
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .spin-border { position: relative; }
         .spin-border::before {
@@ -76,7 +82,7 @@
             background: conic-gradient(from 0deg, transparent, #22d3ee, transparent);
             -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
             -webkit-mask-composite: xor; mask-composite: exclude;
-            animation: spin 1s linear infinite; z-index: -1;
+            animation: spin 1.5s linear infinite; z-index: -1;
         }
 
         .animate-fade-in { animation: fadeIn 0.5s ease-out forwards; }
@@ -84,14 +90,6 @@
         
         .custom-scroll::-webkit-scrollbar { width: 4px; }
         .custom-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
-
-        /* Loader Ring */
-        .loader-ring { display: inline-block; position: relative; width: 64px; height: 64px; }
-        .loader-ring div { box-sizing: border-box; display: block; position: absolute; width: 50px; height: 50px; margin: 8px; border: 4px solid #22d3ee; border-radius: 50%; animation: loader-ring 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite; border-color: #22d3ee transparent transparent transparent; }
-        .loader-ring div:nth-child(1) { animation-delay: -0.45s; }
-        .loader-ring div:nth-child(2) { animation-delay: -0.3s; }
-        .loader-ring div:nth-child(3) { animation-delay: -0.15s; }
-        @keyframes loader-ring { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
         /* Input Slider */
         input[type=range] { -webkit-appearance: none; background: transparent; }
@@ -119,10 +117,9 @@
                 const res = await fetch(`GE.txt?v=${ts}`); 
                 if (!res.ok) return;
                 const txt = await res.text();
-                // Decode keys
                 GEMINI_KEYS = txt.split('\n').map(k=>k.trim()).filter(k=>k.length>5).map(k => { 
-                    if(k.startsWith("AIza")) return k; // Plaintext check
-                    return decodeBase64(k); // Decode check
+                    if(k.startsWith("AIza")) return k; 
+                    return decodeBase64(k); 
                 }).filter(k=>k);
                 console.log("Gemini Keys Active:", GEMINI_KEYS.length);
             } catch(e) { console.warn("Key Load Error: Ensure GE.txt exists"); }
@@ -164,33 +161,20 @@
                             context += content.items.map(item => item.str).join(" ") + " ";
                         }
                         i++;
-                        if(i > 30) break; 
+                        if(i > 20) break; 
                     } catch (e) { break; }
                 }
                 SUBJECT_CONTEXT = context.substring(0, 15000); 
             },
 
-            // DIRECT GEMINI CALL
             callGemini: async (prompt, imageData = null, jsonMode = false) => {
                 if (GEMINI_KEYS.length === 0) throw new Error("No Gemini Keys found. Please upload GE.txt.");
-                
-                // Model Chain (New models from docs)
-                const models = [
-                    "gemini-2.5-flash",    // Fast, smart, multimodal
-                    "gemini-2.5-flash-lite", // Fallback for quotas
-                    "gemini-2.0-flash"     // Legacy stable
-                ];
-
+                const models = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"];
                 const parts = [{ text: prompt }];
-                if (imageData) {
-                    // Gemini expects base64 data directly
-                    parts.push({ inline_data: { mime_type: "image/png", data: imageData } });
-                }
+                if (imageData) parts.push({ inline_data: { mime_type: "image/png", data: imageData } });
 
                 let lastError = null;
-
                 for (const model of models) {
-                    // Random key rotation to distribute load
                     const key = GEMINI_KEYS[Math.floor(Math.random() * GEMINI_KEYS.length)];
                     try {
                         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
@@ -198,45 +182,37 @@
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 contents: [{ parts: parts }],
-                                generationConfig: { 
-                                    responseMimeType: jsonMode ? "application/json" : "text/plain",
-                                    temperature: 0.7 
-                                }
+                                generationConfig: { responseMimeType: jsonMode ? "application/json" : "text/plain" }
                             })
                         });
-
                         if (!response.ok) throw new Error(`HTTP ${response.status}`);
                         const data = await response.json();
-                        if(!data.candidates || !data.candidates[0].content) throw new Error("Blocked response");
                         return data.candidates[0].content.parts[0].text;
-                    } catch (e) {
-                        lastError = e;
-                        console.warn(`Model ${model} failed, trying next...`);
-                        continue;
-                    }
+                    } catch (e) { lastError = e; continue; }
                 }
                 throw lastError || new Error("All Gemini models failed");
             },
 
             generateQuestion: async (subject, level, topics) => {
                 const topic = topics.length > 0 ? topics[Math.floor(Math.random() * topics.length)] : "General";
-                
                 try {
                     const prompt = `Role: WACE ATAR Exam Writer. Subject: ${subject} ${level} - ${topic}.
-                    ${SUBJECT_CONTEXT ? 'Context from Syllabus: ' + SUBJECT_CONTEXT.substring(0, 3000) : ''}
-                    Task: Generate a challenging exam question.
-                    Output: JSON ONLY. Format: {"text":"Question (LaTeX $...$)","topic":"${topic}","answer":"Short Answer","hint":"Hint"}.
-                    Constraint: Single part only. No 'a)', 'b)'. No words like 'space' or 'blank page'.`;
+                    ${SUBJECT_CONTEXT ? 'Context: ' + SUBJECT_CONTEXT.substring(0, 3000) : ''}
+                    Task: Generate a challenging single-part question.
+                    Instructions:
+                    1. Use clear English for text.
+                    2. Use LaTeX $...$ ONLY for math expressions.
+                    3. Do NOT wrap English sentences in $ signs.
+                    4. NO sub-questions (a, b, c).
+                    5. Output JSON: {"text":"Question...","topic":"${topic}","answer":"Short Answer","hint":"Hint"}.`;
                     
                     const text = await AI_ENGINE.callGemini(prompt, null, true);
                     return JSON.parse(text);
                 } catch (e) {
-                    console.error(e);
-                    // Offline Fallback
                     return {
-                        text: `(Offline) Evaluate $\\int 5x^4 dx$.`,
+                        text: `(Offline Mode) Evaluate $\\int (3x^2 + 2) dx$.`,
                         topic: "Calculus",
-                        answer: "$x^5 + C$",
+                        answer: "$x^3 + 2x + C$",
                         hint: "Power Rule",
                         isOffline: true
                     };
@@ -245,28 +221,8 @@
 
             ask: async (prompt, context) => {
                 try {
-                    return await AI_ENGINE.callGemini(`System: ${context}. User: ${prompt}. Reply concisely with LaTeX $...$.`);
-                } catch (e) {
-                    return "Connection to Gemini failed.";
-                }
-            },
-
-            // MULTIMODAL MARKING
-            checkWork: async (canvasDataUrl, questionText, actualAnswer) => {
-                try {
-                    const base64Image = canvasDataUrl.split(',')[1]; // Remove data:image/... prefix
-                    const prompt = `You are a teacher marking a whiteboard. 
-                    Question: ${questionText}
-                    Correct Answer: ${actualAnswer}
-                    Task: Analyze the student's handwritten working in the image.
-                    1. Is the final answer correct?
-                    2. Is the working logic sound?
-                    Output: Brief feedback with LaTeX.`;
-                    
-                    return await AI_ENGINE.callGemini(prompt, base64Image, false);
-                } catch (e) {
-                    return "Couldn't analyze image (Network Error).";
-                }
+                    return await AI_ENGINE.callGemini(`System: ${context}. User: ${prompt}. Reply concisely. Use LaTeX $...$ for math.`);
+                } catch (e) { return "Connection failed."; }
             },
 
             checkAnswerText: async (user, actual, question) => {
@@ -275,21 +231,43 @@
                     const text = await AI_ENGINE.callGemini(prompt, null, true);
                     return JSON.parse(text);
                 } catch (e) {
-                    return { correct: false, feedback: "Error checking answer." };
+                    const isMatch = user.replace(/\s/g,'') === actual.replace(/\s/g,'');
+                    return { correct: isMatch, feedback: isMatch ? "Exact match." : "Offline verification failed." };
                 }
+            },
+
+            checkWork: async (canvasDataUrl, questionText, actualAnswer) => {
+                try {
+                    const base64Image = canvasDataUrl.split(',')[1];
+                    const prompt = `Teacher Task: Mark this student's working. Q: ${questionText}. Ans: ${actualAnswer}. 
+                    Output: Brief feedback with LaTeX. State if correct.`;
+                    return await AI_ENGINE.callGemini(prompt, base64Image, false);
+                } catch (e) { return "Image analysis failed."; }
             }
         };
 
-        // --- MATH RENDERER ---
+        // --- MATH RENDERER (Improved Spacing & Detection) ---
         const MathText = ({ text }) => {
             if (!text) return null;
-            let clean = text.replace(/Leave space/gi, '').replace(/(\bspace\b)/gi, ' ').replace(/\\/g, '\\'); 
+            // Clean AI hallucinations
+            let clean = text.replace(/Answer:/gi, '').replace(/Step 1:/gi, '');
+            
+            // Auto-detect raw LaTeX patterns (like \frac, \int) that aren't wrapped in $ and wrap them
+            // This fixes cases where AI forgets the $ signs
+            const latexPatterns = /(\\frac\{.*?\}\{.*?\}|\\int|\\sum|\\sqrt\{.*?\}|\\times|\\theta|\\pi|\^[0-9a-z]+)/g;
+            clean = clean.replace(latexPatterns, (match, p1, offset, string) => {
+                // Check if already inside $ signs (simple check)
+                const before = string.substring(0, offset);
+                if ((before.match(/\$/g) || []).length % 2 === 1) return match; // Already inside
+                return `$${match}$`;
+            });
+
             const parts = clean.split(/(\$[^$]+\$)/g);
             return (
-                <div className="text-lg leading-relaxed font-sans">
+                <div className="text-lg leading-relaxed font-sans text-slate-200">
                     {parts.map((part, i) => {
                         if (part.startsWith('$') && part.endsWith('$')) {
-                            return <span key={i} className="text-cyan-200 mx-1" dangerouslySetInnerHTML={{__html: katex.renderToString(part.slice(1,-1), {throwOnError:false})}} />;
+                            return <span key={i} className="text-cyan-300 mx-1 font-serif" dangerouslySetInnerHTML={{__html: katex.renderToString(part.slice(1,-1), {throwOnError:false})}} />;
                         }
                         return <span key={i}>{part}</span>;
                     })}
@@ -504,21 +482,18 @@
                     const q = questions[currentQIndex];
 
                     if (type === 'evaluate') {
-                        setMessages(p => [...p, { role: 'ai', text: "Evaluating whiteboard..." }]);
-                        
+                        setMessages(p => [...p, { role: 'ai', text: "Analyzing board..." }]);
                         if (hasDrawn.current && canvasRef.current) {
-                            const img = canvasRef.current.current.toDataURL('image/png'); // Capture Canvas
+                            const img = canvasRef.current.current.toDataURL('image/png');
                             const feedback = await AI_ENGINE.checkWork(img, q.text, q.answer);
                             setMessages(p => [...p, { role: 'ai', text: feedback }]);
                         } else {
-                            setMessages(p => [...p, { role: 'ai', text: "Board is empty. Try writing something." }]);
+                            setMessages(p => [...p, { role: 'ai', text: "Board empty. Try writing first." }]);
                         }
-                        setIsProcessing(false);
-                        setGenPaused(false);
                     }
                     else if (type === 'submit') {
                         if (!userAns) return;
-                        setMessages(p => [...p, { role: 'user', text: `Submitted: ${userAns}` }, { role: 'ai', text: "Verifying..." }]);
+                        setMessages(p => [...p, { role: 'user', text: `Submitted: ${userAns}` }, { role: 'ai', text: "Checking..." }]);
                         const check = await AI_ENGINE.checkAnswerText(userAns, q.answer, q.text);
                         setMessages(p => [...p, { role: 'ai', text: check.feedback }]);
                         if (check.correct) {
@@ -527,8 +502,6 @@
                         } else {
                             setTeacherMarks([{ type: 'cross', x: 200, y: 200 }]);
                         }
-                        setIsProcessing(false);
-                        setGenPaused(false);
                     }
                     else if (type === 'giveup') {
                         setModalConfig({
@@ -538,13 +511,11 @@
                                 setQuestions(p => { const n = [...p]; n[currentQIndex].status = 'wrong'; return n; });
                                 setTeacherMarks([{ type: 'cross', x: 200, y: 200 }]);
                                 setModalConfig(null);
-                                setIsProcessing(false);
-                                setGenPaused(false);
                             },
-                            onCancel: () => { setModalConfig(null); setIsProcessing(false); setGenPaused(false); }
+                            onCancel: () => setModalConfig(null)
                         });
                     }
-                } catch(e) {
+                } finally {
                     setIsProcessing(false);
                     setGenPaused(false);
                 }
@@ -575,9 +546,18 @@
             const allDone = questions.every(q => q.status === 'correct' || q.status === 'wrong');
             const currentQ = questions[currentQIndex] || { status: 'generating' };
             const isQLoading = currentQ.status === 'generating';
-            const isOffline = currentQ.isOffline;
 
-            // VIEW RENDER
+            // RENDER
+            // --- Loading Overlay (Always Top) ---
+            const LoadingOverlay = () => (
+                <div className="absolute inset-0 bg-black/90 z-50 flex flex-col items-center justify-center">
+                    <div className="loader-ring mb-4"><div></div><div></div><div></div></div>
+                    <div className="text-white text-xl font-bold">Generating Test...</div>
+                    <div className="text-cyan-400 font-mono mt-2">{loadingTime.toFixed(1)}s</div>
+                    <div className="text-slate-500 text-xs mt-1">Est: {questionCount * 2.5}s</div>
+                </div>
+            );
+
             if (view === 'menu') return (
                 <div className="fixed inset-0 flex flex-col items-center justify-center p-4">
                     {dbStatus === false && <div className="absolute top-10 right-10 text-xs text-red-400 border border-red-500/20 p-2 rounded glass-panel">No Database (Cloud Mode)</div>}
@@ -587,7 +567,6 @@
                         <input className="w-full glass-input p-4 rounded-xl mb-4" placeholder="Enter Name..." value={user} onChange={e=>setUser(e.target.value)} />
                         <button onClick={()=>user && setView('setup')} className="w-full premium-btn text-white font-bold p-4 rounded-xl">Start Session</button>
                     </div>
-                    <div className="absolute bottom-4 text-[10px] text-slate-600 opacity-60">© {new Date().getFullYear()} ATAR Helper</div>
                 </div>
             );
 
@@ -637,6 +616,7 @@
                             <button onClick={startTest} className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold py-3 rounded-xl shadow-lg">Start Test</button>
                         </div>
                     </div>
+                    {loading && <LoadingOverlay />}
                 </div>
             );
 
@@ -645,9 +625,10 @@
             // TEST VIEW
             return (
                 <div className="fixed inset-0 flex overflow-hidden bg-black/40 backdrop-blur-sm">
+                    {loading && <LoadingOverlay />}
                     <Modal isOpen={!!modalConfig} message={modalConfig?.message} confirmText={modalConfig?.confirmText} onConfirm={modalConfig?.onConfirm} onCancel={() => setModalConfig(null)} />
                     
-                    {isOffline && <div className="absolute top-0 w-full bg-yellow-500/80 text-black text-xs font-bold text-center py-1 z-50">⚠ Offline Mode</div>}
+                    {currentQ.isOffline && <div className="absolute top-0 w-full bg-yellow-500/80 text-black text-xs font-bold text-center py-1 z-50">⚠ Offline Mode</div>}
 
                     {/* SIDEBAR */}
                     <div className="w-20 glass-panel border-r border-white/5 flex flex-col items-center py-6 gap-4 pt-24 z-30">
@@ -668,19 +649,9 @@
 
                     {/* WORKSPACE */}
                     <div className="flex-1 flex flex-col relative">
-                        {loading && (
-                            <div className="absolute inset-0 bg-black/90 z-50 flex flex-col items-center justify-center">
-                                <div className="loader-ring mb-4"><div></div><div></div><div></div></div>
-                                <div className="text-white text-xl font-bold">Generating Test...</div>
-                                <div className="text-cyan-400 font-mono mt-2">{loadingTime.toFixed(1)}s</div>
-                                <div className="text-slate-500 text-xs mt-1">Est: {questionCount * 2.5}s</div>
-                            </div>
-                        )}
-                        
                         <div className="absolute top-4 right-4 glass-panel px-4 py-2 rounded-full text-sm font-mono z-20 flex gap-2">
                             <span className="text-slate-400">Time:</span> <span className="text-white">{Math.floor(timer/60)}m {timer%60}s</span>
                         </div>
-
                         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
                             <div className="glass-panel rounded-full px-4 py-2 flex items-center gap-4">
                                 <button onClick={() => setWbTool('pen')} className={`${wbTool==='pen'?'text-cyan-400':'text-slate-400'}`}><i className="fa-solid fa-pen"></i></button>
