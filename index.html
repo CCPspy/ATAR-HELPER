@@ -76,7 +76,13 @@
 
         /* Loader */
         .loader-ring { display: inline-block; position: relative; width: 64px; height: 64px; }
-        .loader-ring div { box-sizing: border-box; display: block; position: absolute; width: 50px; height: 50px; margin: 7px; border: 3px solid #22d3ee; border-radius: 50%; animation: loader-ring 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite; border-color: #22d3ee transparent transparent transparent; }
+        .loader-ring div { 
+            box-sizing: border-box; display: block; position: absolute; width: 50px; height: 50px; margin: 7px; 
+            border: 3px solid #22d3ee; border-radius: 50%; 
+            animation: loader-ring 1.2s linear infinite; /* Smooth linear spin */
+            border-color: #22d3ee transparent transparent transparent; 
+            will-change: transform;
+        }
         .loader-ring div:nth-child(1) { animation-delay: -0.45s; }
         .loader-ring div:nth-child(2) { animation-delay: -0.3s; }
         .loader-ring div:nth-child(3) { animation-delay: -0.15s; }
@@ -205,13 +211,10 @@
                 try {
                     const prompt = `Role: WACE ATAR Exam Writer. Subject: ${subject} ${level} - ${topic}.
                     ${SUBJECT_CONTEXT ? 'Context: ' + SUBJECT_CONTEXT.substring(0, 3000) : ''}
-                    Task: Generate a challenging single-part question with specific marks assigned (default 3).
+                    Task: Generate a challenging single-part question and assign marks (e.g. 2, 3, 4, 5) based on difficulty.
                     Output: JSON ONLY. Format: 
-                    {"text":"Question (LaTeX $...$)","topic":"${topic}","answer":"Short Answer","hint":"Hint", "marks": 3}.
-                    Constraints:
-                    1. No sub-questions (a, b). 
-                    2. No words like 'space', 'blank page'.
-                    3. Ensure LaTeX is clean (no \\begin{enumerate}).`;
+                    {"text":"Question (LaTeX $...$)","topic":"${topic}","answer":"Short Answer","hint":"Hint", "marks": 4}.
+                    Constraint: Single part only. No 'a)', 'b)'. No 'Leave space'.`;
                     
                     const text = await AI_ENGINE.callGemini(prompt, null, true);
                     return JSON.parse(text);
@@ -271,7 +274,7 @@
             }
         };
 
-        // --- MATH RENDERER (Cleaned & Improved) ---
+        // --- MATH RENDERER ---
         const MathText = ({ text }) => {
             if (!text) return null;
             let clean = text
@@ -489,7 +492,9 @@
             const hasDrawn = useRef(false);
             const canvasRef = useRef(null);
 
-            useEffect(() => { initKeys().then(() => AI_ENGINE.checkDatabase('Methods','Year 12').then(setDbStatus)); }, []);
+            useEffect(() => {
+                initKeys().then(() => AI_ENGINE.checkDatabase('Methods','Year 12').then(setDbStatus));
+            }, []);
 
             useEffect(() => {
                 const yearData = CURRICULUM[subject]?.[level];
@@ -500,7 +505,10 @@
                     setAvailableTopics(topics);
                     setSelectedTopics(topics);
                 }
-                AI_ENGINE.checkDatabase(subject, level).then(s => { setDbStatus(s); if(s) AI_ENGINE.loadContext(subject, level); });
+                AI_ENGINE.checkDatabase(subject, level).then(s => {
+                    setDbStatus(s);
+                    if(s) AI_ENGINE.loadContext(subject, level);
+                });
             }, [subject, level, selectedUnit]);
 
             useEffect(() => {
@@ -511,19 +519,22 @@
 
             useEffect(() => {
                 let interval;
-                if (loading) interval = setInterval(() => setLoadingTime(t => t + 0.1), 100); else setLoadingTime(0);
+                if (loading) interval = setInterval(() => setLoadingTime(t => t + 0.1), 100);
+                else setLoadingTime(0);
                 return () => clearInterval(interval);
             }, [loading]);
 
             const backgroundGenerator = async (count, topics) => {
                 const q1 = await AI_ENGINE.generateQuestion(subject, level, topics);
-                setQuestions(prev => { const n = [...prev]; n[0] = { ...q1, status: 'ready', maxMarks: 3 }; return n; });
-                setLoading(false); setView('test');
+                setQuestions(prev => { const n = [...prev]; n[0] = { ...q1, status: 'ready', maxMarks: q1.marks || 3 }; return n; });
+                setLoading(false);
+                setView('test');
+
                 for (let i = 1; i < count; i++) {
                     await new Promise(r => setTimeout(r, 2000));
                     while(genPaused.current) await new Promise(r => setTimeout(r, 1000));
                     const q = await AI_ENGINE.generateQuestion(subject, level, topics);
-                    setQuestions(prev => { const n = [...prev]; if(n[i]) n[i] = { ...q, status: 'ready', maxMarks: 3 }; return n; });
+                    setQuestions(prev => { const n = [...prev]; if(n[i]) n[i] = { ...q, status: 'ready', maxMarks: q.marks || 3 }; return n; });
                 }
             };
 
@@ -597,6 +608,7 @@
                 setIsProcessing(true); setGenPaused(true);
                 const txt = chatInput; setChatInput('');
                 setMessages(p => [...p, { role: 'user', text: txt }, { role: 'ai', text: "..." }]);
+                const q = questions[currentQIndex];
                 const res = await AI_ENGINE.ask(txt, `Q:${questions[currentQIndex]?.text}`);
                 setMessages(p => { const n = [...p]; n.pop(); return [...n, { role: 'ai', text: res }]; });
                 setIsProcessing(false);
@@ -691,9 +703,10 @@
                     <FeedbackPanel data={currentFeedback} isOpen={showFeedback} />
 
                     {/* SIDEBAR */}
-                    <div className="w-20 glass-panel border-r border-white/5 flex flex-col items-center py-6 gap-4 pt-28 z-30">
+                    <div className="w-20 glass-panel border-r border-white/5 flex flex-col items-center py-6 gap-4 pt-6 z-30">
                         <button onClick={()=>{if(confirm("Exit?")) setView('topics')}} className="text-slate-400 hover:text-red-400 mb-2"><i className="fa-solid fa-arrow-left"></i></button>
-                        <div className="flex-1 w-full flex flex-col items-center gap-3 overflow-y-auto custom-scroll">
+                        <div className="w-8 h-px bg-white/10 mb-2"></div>
+                        <div className="flex-1 w-full flex flex-col items-center gap-3 overflow-y-auto custom-scroll py-4">
                             {questions.map((q, i) => (
                                 <button key={i} onClick={()=>!isProcessing && q.status!=='generating' && changeQuestion(i)}
                                     className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
