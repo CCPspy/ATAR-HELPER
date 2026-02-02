@@ -38,9 +38,9 @@
             touch-action: none;
         }
 
-        /* Premium Glassmorphism */
+        /* Glassmorphism Classes */
         .glass-panel {
-            background: rgba(15, 23, 42, 0.4); 
+            background: rgba(15, 23, 42, 0.45); 
             backdrop-filter: blur(24px);
             -webkit-backdrop-filter: blur(24px);
             border: 1px solid rgba(255, 255, 255, 0.08);
@@ -72,7 +72,7 @@
         .premium-btn:active:not(:disabled) { transform: scale(0.98); }
         .premium-btn:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(1); }
 
-        /* Smooth Loader */
+        /* Loader */
         .loader-ring { display: inline-block; position: relative; width: 64px; height: 64px; }
         .loader-ring div { box-sizing: border-box; display: block; position: absolute; width: 50px; height: 50px; margin: 7px; border: 3px solid #22d3ee; border-radius: 50%; animation: loader-ring 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite; border-color: #22d3ee transparent transparent transparent; }
         .loader-ring div:nth-child(1) { animation-delay: -0.45s; }
@@ -84,15 +84,15 @@
         .slide-panel { transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); transform: translateX(100%); }
         .slide-panel.open { transform: translateX(0); }
 
-        /* Sidebar Spinner */
+        /* Sidebar Spinner - Fixed Shape */
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .spin-border { position: relative; }
         .spin-border::before {
-            content: ''; position: absolute; inset: -2px; border-radius: 50%; padding: 2px;
+            content: ''; position: absolute; inset: -3px; border-radius: 50%; padding: 3px;
             background: conic-gradient(from 0deg, transparent, #22d3ee, transparent);
             -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
             -webkit-mask-composite: xor; mask-composite: exclude;
-            animation: spin 1.5s linear infinite; z-index: -1;
+            animation: spin 1s linear infinite; z-index: -1;
         }
 
         .animate-fade-in { animation: fadeIn 0.5s ease-out forwards; }
@@ -116,10 +116,8 @@
         let GEMINI_KEYS = []; 
         let SUBJECT_CONTEXT = ""; 
 
-        // --- DECODERS ---
         const decodeBase64 = (str) => { try { let d=atob(str); if(d.includes("AIza"))return d; return null; } catch(e){return null;} }
 
-        // --- INIT KEYS ---
         async function initKeys() {
             try {
                 const ts = new Date().getTime();
@@ -130,11 +128,10 @@
                     if(k.startsWith("AIza")) return k; 
                     return decodeBase64(k); 
                 }).filter(k=>k);
-                console.log("Gemini Keys Active:", GEMINI_KEYS.length);
+                console.log("Gemini Keys:", GEMINI_KEYS.length);
             } catch(e) { console.warn("Key Load Error"); }
         }
 
-        // --- CURRICULUM ---
         const CURRICULUM = {
             "Methods": { "Year 11": { "Unit 1": ["Functions", "Trig", "Prob"], "Unit 2": ["Calculus", "Exp/Log", "Series"] }, "Year 12": { "Unit 3": ["Calculus II", "Integrals", "Random Var"], "Unit 4": ["Logarithms", "Continuous Var", "Stats"] } },
             "Spec": { "Year 11": { "Unit 1": ["Combinatorics", "Vectors", "Geometry"], "Unit 2": ["Trig", "Matrices", "Complex"] }, "Year 12": { "Unit 3": ["Complex II", "Sketching", "Vectors 3D"], "Unit 4": ["Integration II", "Diff Eq", "Stats"] } },
@@ -142,7 +139,6 @@
             "Chem": { "Year 11": { "Unit 1": ["Atomic", "Bonding", "Organic"], "Unit 2": ["Forces", "Solutions", "Gases"] }, "Year 12": { "Unit 3": ["Equilibrium", "Acids", "Redox"], "Unit 4": ["Organic II", "Polymers", "Synthesis"] } }
         };
 
-        // --- GEMINI AI ENGINE ---
         const AI_ENGINE = {
             checkDatabase: async (subject, level) => {
                 const safeLevel = level.replace(/ /g, '%20');
@@ -177,7 +173,7 @@
             },
 
             callGemini: async (prompt, imageData = null, jsonMode = false) => {
-                if (GEMINI_KEYS.length === 0) throw new Error("No Gemini Keys found. Upload GE.txt.");
+                if (GEMINI_KEYS.length === 0) throw new Error("No Gemini Keys found. Please upload GE.txt.");
                 const models = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"];
                 const parts = [{ text: prompt }];
                 if (imageData) parts.push({ inline_data: { mime_type: "image/png", data: imageData } });
@@ -191,7 +187,7 @@
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 contents: [{ parts: parts }],
-                                generationConfig: { responseMimeType: jsonMode ? "application/json" : "text/plain" }
+                                generationConfig: { responseMimeType: jsonMode ? "application/json" : "text/plain", temperature: 0.7 }
                             })
                         });
                         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -208,64 +204,42 @@
                     const prompt = `Role: WACE ATAR Exam Writer. Subject: ${subject} ${level} - ${topic}.
                     ${SUBJECT_CONTEXT ? 'Context: ' + SUBJECT_CONTEXT.substring(0, 3000) : ''}
                     Task: Generate a challenging single-part question.
-                    Output: JSON ONLY. Format: 
-                    {"text":"Question (LaTeX $...$)","topic":"${topic}","answer":"Short Answer","hint":"Hint", "marks": 3}.
+                    Output: JSON ONLY. Format: {"text":"Question (LaTeX $...$)","topic":"${topic}","answer":"Short Answer","hint":"Hint", "marks": 3}.
                     Constraint: Single part only. No 'a)', 'b)'. No 'Leave space'.`;
-                    
                     const text = await AI_ENGINE.callGemini(prompt, null, true);
                     return JSON.parse(text);
                 } catch (e) {
-                    return {
-                        text: `(Offline) Evaluate $\\int 5x^4 dx$.`, topic: "Calculus", answer: "$x^5 + C$", hint: "Power Rule", marks: 3, isOffline: true
-                    };
+                    return { text: `(Offline) Evaluate $\\int 5x^4 dx$.`, topic: "Calculus", answer: "$x^5 + C$", hint: "Power Rule", marks: 3, isOffline: true };
                 }
             },
 
-            // --- SMART GRADING SYSTEM ---
             gradeSubmission: async (userText, actualAns, questionText, canvasDataUrl) => {
                 try {
                     const base64Image = canvasDataUrl ? canvasDataUrl.split(',')[1] : null;
-                    const prompt = `Role: Senior Teacher. Task: Grade Student.
-                    Question: ${questionText}
-                    Correct Answer: ${actualAns}
-                    Student Final Answer (Typed): ${userText}
-                    ${base64Image ? 'Student Working: See attached image.' : ''}
-                    
-                    Instructions:
-                    1. Check if the final answer is correct (allowing for formatting diffs).
-                    2. Analyze working (if image provided). Award partial marks for logic.
-                    3. Output JSON ONLY:
-                    {
-                        "mark": number (out of max marks),
-                        "maxMarks": number (from question, assume 3 if unknown),
-                        "correct": boolean (is final answer right?),
-                        "feedback": {
-                            "positives": "What they did right (LaTeX)",
-                            "negatives": "Mistakes made",
-                            "improvements": "How to fix it"
-                        }
-                    }`;
-                    
+                    const prompt = `Role: Senior Teacher. Task: Grade Student. Q: ${questionText}. Correct: ${actualAns}. Student: ${userText}.
+                    Output JSON ONLY: {"mark": number, "maxMarks": number, "correct": boolean, "feedback": {"positives": "str", "negatives": "str", "improvements": "str"}}`;
                     const text = await AI_ENGINE.callGemini(prompt, base64Image, true);
                     return JSON.parse(text);
                 } catch (e) {
-                    // Fallback grading
                     const isMatch = userText.replace(/\s/g,'') === actualAns.replace(/\s/g,'');
-                    return {
-                        mark: isMatch ? 3 : 0, maxMarks: 3, correct: isMatch,
-                        feedback: { positives: "Attempted.", negatives: isMatch ? "None." : "Incorrect result.", improvements: "Check formula." }
-                    };
+                    return { mark: isMatch ? 3 : 0, maxMarks: 3, correct: isMatch, feedback: { positives: "Attempted.", negatives: "Check answer.", improvements: "Review formula." } };
                 }
             },
 
             ask: async (prompt, context) => {
+                try { return await AI_ENGINE.callGemini(`System: ${context}. User: ${prompt}. Reply concise LaTeX.`); } 
+                catch (e) { return "Connection failed."; }
+            },
+
+            checkWork: async (canvasDataUrl, questionText, actualAnswer) => {
                 try {
-                    return await AI_ENGINE.callGemini(`System: ${context}. User: ${prompt}. Reply concisely with LaTeX $...$.`);
-                } catch (e) { return "Connection failed."; }
+                    const base64Image = canvasDataUrl.split(',')[1]; 
+                    const prompt = `Teacher Task: Mark working. Q: ${questionText}. Ans: ${actualAnswer}. Output: Brief feedback LaTeX.`;
+                    return await AI_ENGINE.callGemini(prompt, base64Image, false);
+                } catch (e) { return "Image analysis failed."; }
             }
         };
 
-        // --- MATH RENDERER ---
         const MathText = ({ text }) => {
             if (!text) return null;
             let clean = text.replace(/Leave space/gi, '').replace(/(\bspace\b)/gi, ' ').replace(/\\/g, '\\'); 
@@ -282,7 +256,6 @@
             );
         };
 
-        // --- COMPONENTS ---
         const Whiteboard = memo(({ tool, color, size, triggerClear, teacherMarks, hasDrawnRef, getCanvasRef }) => {
             const canvasRef = useRef(null);
             const ctxRef = useRef(null);
@@ -315,9 +288,8 @@
                     const ctx = ctxRef.current;
                     ctx.save(); 
                     teacherMarks.forEach((m) => {
-                        ctx.strokeStyle = m.type === 'tick' ? '#10b981' : '#ef4444'; // Green or Red
-                        ctx.lineWidth = 4;
-                        ctx.beginPath();
+                        ctx.strokeStyle = m.type === 'tick' ? '#10b981' : '#ef4444';
+                        ctx.lineWidth = 4; ctx.beginPath();
                         if(m.type === 'tick') { ctx.moveTo(m.x, m.y); ctx.lineTo(m.x+15, m.y+30); ctx.lineTo(m.x+50, m.y-40); }
                         else { ctx.moveTo(m.x, m.y); ctx.lineTo(m.x+40, m.y+40); ctx.moveTo(m.x+40, m.y); ctx.lineTo(m.x, m.y+40); }
                         ctx.stroke();
@@ -352,32 +324,15 @@
             return <canvas ref={canvasRef} onMouseDown={start} onMouseMove={move} onMouseUp={()=>setIsDrawing(false)} onMouseLeave={()=>setIsDrawing(false)} onTouchStart={start} onTouchMove={move} onTouchEnd={()=>setIsDrawing(false)} className="w-full h-full cursor-crosshair touch-none" />;
         });
 
-        // --- SIDE PANEL (FEEDBACK) ---
         const FeedbackPanel = ({ data, isOpen }) => {
             if (!isOpen || !data) return null;
             return (
                 <div className={`slide-panel absolute top-0 right-0 h-full w-80 bg-slate-900/95 backdrop-blur-xl border-l border-white/10 p-6 z-40 transform transition-transform duration-500 ${isOpen ? 'translate-x-0' : 'translate-x-full'} shadow-2xl flex flex-col`}>
-                    <div className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400 mb-6 mt-16">
-                        Results: {data.mark}/{data.maxMarks}
-                    </div>
-                    
+                    <div className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400 mb-6 mt-16">Results: {data.mark}/{data.maxMarks}</div>
                     <div className="space-y-4 flex-1 overflow-y-auto custom-scroll">
-                        <div className="bg-emerald-900/20 border border-emerald-500/30 p-3 rounded-xl">
-                            <div className="text-xs font-bold text-emerald-400 uppercase mb-1">What went right</div>
-                            <MathText text={data.feedback.positives} />
-                        </div>
-                        
-                        {data.mark < data.maxMarks && (
-                            <div className="bg-red-900/20 border border-red-500/30 p-3 rounded-xl">
-                                <div className="text-xs font-bold text-red-400 uppercase mb-1">Mistakes</div>
-                                <MathText text={data.feedback.negatives} />
-                            </div>
-                        )}
-                        
-                        <div className="bg-blue-900/20 border border-blue-500/30 p-3 rounded-xl">
-                            <div className="text-xs font-bold text-blue-400 uppercase mb-1">Improvements</div>
-                            <MathText text={data.feedback.improvements} />
-                        </div>
+                        <div className="bg-emerald-900/20 border border-emerald-500/30 p-3 rounded-xl"><div className="text-xs font-bold text-emerald-400 uppercase mb-1">Good</div><MathText text={data.feedback.positives} /></div>
+                        {data.mark < data.maxMarks && <div className="bg-red-900/20 border border-red-500/30 p-3 rounded-xl"><div className="text-xs font-bold text-red-400 uppercase mb-1">Mistakes</div><MathText text={data.feedback.negatives} /></div>}
+                        <div className="bg-blue-900/20 border border-blue-500/30 p-3 rounded-xl"><div className="text-xs font-bold text-blue-400 uppercase mb-1">Improve</div><MathText text={data.feedback.improvements} /></div>
                     </div>
                 </div>
             );
@@ -403,15 +358,11 @@
             const totalMarks = questions.reduce((acc, q) => acc + (q.userMark || 0), 0);
             const maxMarks = questions.reduce((acc, q) => acc + (q.maxMarks || 3), 0);
             const percent = Math.round((totalMarks/maxMarks)*100) || 0;
-
             const downloadReport = () => {
-                const text = `ATAR HELPER REPORT\nName: ${user}\nSubject: ${subject} ${level}\nScore: ${totalMarks}/${maxMarks} (${percent}%)\nTime: ${Math.floor(timer/60)}m ${timer%60}s\n\nBREAKDOWN:\n${questions.map((q,i) => 
-                    `Q${i+1} [${q.topic}]: ${q.userMark}/${q.maxMarks || 3}\nQuestion: ${q.text}\nYour Answer: ${q.userAns}\nFeedback: ${q.feedback?.improvements || 'None'}`
-                ).join('\n\n----------------\n\n')}`;
+                const text = `ATAR HELPER REPORT\nName: ${user}\nSubject: ${subject} ${level}\nScore: ${totalMarks}/${maxMarks} (${percent}%)\nTime: ${Math.floor(timer/60)}m ${timer%60}s\n\nBREAKDOWN:\n${questions.map((q,i) => `Q${i+1}: ${q.userMark}/${q.maxMarks}\nQ: ${q.text}\nA: ${q.userAns}\nFB: ${q.feedback?.improvements}`).join('\n\n')}`;
                 const blob = new Blob([text], { type: 'text/plain' });
                 const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url; a.download = `Report_${user}.txt`; a.click();
+                const a = document.createElement('a'); a.href = url; a.download = `Report_${user}.txt`; a.click();
             };
             return (
                 <div className="absolute inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4 animate-fade-in">
@@ -430,34 +381,28 @@
             );
         };
 
-        // --- MAIN APP ---
         const App = () => {
             const [view, setView] = useState('menu');
             const [user, setUser] = useState('');
             const [subject, setSubject] = useState('Methods');
             const [level, setLevel] = useState('Year 12');
             const [dbStatus, setDbStatus] = useState(null);
-            
             const [selectedUnit, setSelectedUnit] = useState('Whole Year');
             const [availableTopics, setAvailableTopics] = useState([]);
             const [selectedTopics, setSelectedTopics] = useState([]);
             const [questionCount, setQuestionCount] = useState(5);
-            
             const [questions, setQuestions] = useState([]);
             const [currentQIndex, setCurrentQIndex] = useState(0);
             const [messages, setMessages] = useState([]);
             const [chatInput, setChatInput] = useState('');
             const [userAns, setUserAns] = useState('');
             const [teacherMarks, setTeacherMarks] = useState([]);
-            
             const [loading, setLoading] = useState(false);
             const [loadingTime, setLoadingTime] = useState(0);
             const [isProcessing, setIsProcessing] = useState(false);
             const [genPaused, setGenPaused] = useState(false);
             const [timer, setTimer] = useState(0);
             const [modalConfig, setModalConfig] = useState(null);
-            
-            // New Grading State
             const [currentFeedback, setCurrentFeedback] = useState(null);
             const [showFeedback, setShowFeedback] = useState(false);
             
@@ -468,9 +413,7 @@
             const hasDrawn = useRef(false);
             const canvasRef = useRef(null);
 
-            useEffect(() => {
-                initKeys().then(() => AI_ENGINE.checkDatabase('Methods','Year 12').then(setDbStatus));
-            }, []);
+            useEffect(() => { initKeys().then(() => AI_ENGINE.checkDatabase('Methods','Year 12').then(setDbStatus)); }, []);
 
             useEffect(() => {
                 const yearData = CURRICULUM[subject]?.[level];
@@ -481,33 +424,25 @@
                     setAvailableTopics(topics);
                     setSelectedTopics(topics);
                 }
-                AI_ENGINE.checkDatabase(subject, level).then(s => {
-                    setDbStatus(s);
-                    if(s) AI_ENGINE.loadContext(subject, level);
-                });
+                AI_ENGINE.checkDatabase(subject, level).then(s => { setDbStatus(s); if(s) AI_ENGINE.loadContext(subject, level); });
             }, [subject, level, selectedUnit]);
 
             useEffect(() => {
                 let interval;
-                if (view === 'test' && questions[currentQIndex]?.status === 'ready' && !showFeedback) {
-                    interval = setInterval(() => setTimer(t => t + 1), 1000);
-                }
+                if (view === 'test' && questions[currentQIndex]?.status === 'ready' && !showFeedback) interval = setInterval(() => setTimer(t => t + 1), 1000);
                 return () => clearInterval(interval);
             }, [view, questions, currentQIndex, showFeedback]);
 
             useEffect(() => {
                 let interval;
-                if (loading) interval = setInterval(() => setLoadingTime(t => t + 0.1), 100);
-                else setLoadingTime(0);
+                if (loading) interval = setInterval(() => setLoadingTime(t => t + 0.1), 100); else setLoadingTime(0);
                 return () => clearInterval(interval);
             }, [loading]);
 
             const backgroundGenerator = async (count, topics) => {
                 const q1 = await AI_ENGINE.generateQuestion(subject, level, topics);
                 setQuestions(prev => { const n = [...prev]; n[0] = { ...q1, status: 'ready', maxMarks: 3 }; return n; });
-                setLoading(false);
-                setView('test');
-
+                setLoading(false); setView('test');
                 for (let i = 1; i < count; i++) {
                     await new Promise(r => setTimeout(r, 2000));
                     while(genPaused.current) await new Promise(r => setTimeout(r, 1000));
@@ -525,66 +460,37 @@
                 await backgroundGenerator(questionCount, selectedTopics);
             };
 
-            // 1. EVALUATE: Just hints, no lock
             const handleEvaluate = async () => {
                 if(isProcessing) return;
-                setIsProcessing(true);
-                setGenPaused(true);
+                setIsProcessing(true); setGenPaused(true);
                 const q = questions[currentQIndex];
-                
                 setMessages(p => [...p, { role: 'ai', text: "Looking at your working..." }]);
-                
                 try {
                     let hint = "Board empty.";
                     if (hasDrawn.current && canvasRef.current) {
                         const img = canvasRef.current.current.toDataURL('image/png');
-                        hint = await AI_ENGINE.checkWork(img, q.text, q.answer); // Vision check only
-                    } else {
-                        hint = await AI_ENGINE.ask("Give me a hint for this question.", `Q: ${q.text}`);
-                    }
+                        hint = await AI_ENGINE.checkWork(img, q.text, q.answer);
+                    } else { hint = await AI_ENGINE.ask("Give hint.", `Q: ${q.text}`); }
                     setMessages(p => [...p, { role: 'ai', text: hint }]);
                 } catch(e) {} 
-                setIsProcessing(false);
-                setGenPaused(false);
+                setIsProcessing(false); setGenPaused(false);
             };
 
-            // 2. SUBMIT: Locks question, Grades it, Shows Panel
             const handleSubmit = async () => {
                 if(!userAns.trim() || isProcessing) return;
-                setIsProcessing(true);
-                setGenPaused(true);
-                
+                setIsProcessing(true); setGenPaused(true);
                 const q = questions[currentQIndex];
                 setMessages(p => [...p, { role: 'user', text: `Submitted: ${userAns}` }, { role: 'ai', text: "Grading..." }]);
-
-                // Capture image for grading context
                 let img = null;
                 if(hasDrawn.current && canvasRef.current) img = canvasRef.current.current.toDataURL('image/png');
-
-                // Advanced Grading
                 const result = await AI_ENGINE.gradeSubmission(userAns, q.answer, q.text, img);
-                
-                // Update State
                 setQuestions(prev => {
                     const n = [...prev];
-                    n[currentQIndex] = { 
-                        ...n[currentQIndex], 
-                        status: result.correct ? 'correct' : 'wrong',
-                        userMark: result.mark,
-                        userAns: userAns,
-                        feedback: result.feedback
-                    };
+                    n[currentQIndex] = { ...n[currentQIndex], status: result.correct ? 'correct' : 'wrong', userMark: result.mark, userAns: userAns, feedback: result.feedback };
                     return n;
                 });
-
-                // Visuals
-                if (result.mark > 0) setTeacherMarks([{ type: 'tick', x: 200, y: 200 }]);
-                else setTeacherMarks([{ type: 'cross', x: 200, y: 200 }]);
-
-                setCurrentFeedback(result);
-                setShowFeedback(true);
-                setIsProcessing(false);
-                setGenPaused(false);
+                if (result.mark > 0) setTeacherMarks([{ type: 'tick', x: 200, y: 200 }]); else setTeacherMarks([{ type: 'cross', x: 200, y: 200 }]);
+                setCurrentFeedback(result); setShowFeedback(true); setIsProcessing(false); setGenPaused(false);
             };
 
             const handleGiveUp = () => {
@@ -592,13 +498,7 @@
                     message: "Show answer? (0 Marks)", confirmText: "Yes",
                     onConfirm: () => {
                         const q = questions[currentQIndex];
-                        setQuestions(prev => {
-                            const n = [...prev]; 
-                            n[currentQIndex].status = 'wrong'; 
-                            n[currentQIndex].userMark = 0;
-                            n[currentQIndex].feedback = { positives: "Skipped", negatives: "Gave up", improvements: "Review topic." };
-                            return n;
-                        });
+                        setQuestions(prev => { const n = [...prev]; n[currentQIndex].status = 'wrong'; n[currentQIndex].userMark = 0; n[currentQIndex].feedback = { positives: "Skipped", negatives: "Gave up", improvements: "Review topic." }; return n; });
                         setTeacherMarks([{ type: 'cross', x: 200, y: 200 }]);
                         setMessages(p => [...p, { role: 'ai', text: `Answer: ${q.answer}` }]);
                         setModalConfig(null);
@@ -609,14 +509,12 @@
 
             const changeQuestion = (idx) => {
                 if (questions[idx].status === 'generating' || isProcessing) return;
-                setCurrentQIndex(idx);
-                setTeacherMarks([]); setClearBoardTrig(p => p+1); hasDrawn.current = false; setUserAns('');
-                setShowFeedback(false);
+                setCurrentQIndex(idx); setTeacherMarks([]); setClearBoardTrig(p => p+1); hasDrawn.current = false; setUserAns(''); setShowFeedback(false);
             };
 
             const handleChat = async () => {
                 if (!chatInput.trim() || isProcessing) return;
-                setIsProcessing(true);
+                setIsProcessing(true); setGenPaused(true);
                 const txt = chatInput; setChatInput('');
                 setMessages(p => [...p, { role: 'user', text: txt }, { role: 'ai', text: "..." }]);
                 const res = await AI_ENGINE.ask(txt, `Q:${questions[currentQIndex]?.text}`);
@@ -628,7 +526,16 @@
             const isGraded = currentQ.status === 'correct' || currentQ.status === 'wrong';
             const allDone = questions.every(q => q.status === 'correct' || q.status === 'wrong');
 
-            // --- RENDER ---
+            // --- VIEW RENDERERS ---
+            const LoadingOverlay = () => (
+                <div className="absolute inset-0 bg-black/90 z-50 flex flex-col items-center justify-center">
+                    <div className="loader-ring mb-4"><div></div><div></div><div></div></div>
+                    <div className="text-white text-xl font-bold">Generating Test...</div>
+                    <div className="text-cyan-400 font-mono mt-2">{loadingTime.toFixed(1)}s</div>
+                    <div className="text-slate-500 text-xs mt-1">Est: {questionCount * 2.5}s</div>
+                </div>
+            );
+
             if (view === 'menu') return (
                 <div className="fixed inset-0 flex flex-col items-center justify-center p-4">
                     {dbStatus === false && <div className="absolute top-10 right-10 text-xs text-red-400 border border-red-500/20 p-2 rounded glass-panel">No Database (Cloud Mode)</div>}
@@ -696,17 +603,9 @@
             // TEST VIEW
             return (
                 <div className="fixed inset-0 flex overflow-hidden bg-black/40 backdrop-blur-sm">
-                    {loading && (
-                        <div className="absolute inset-0 bg-black/90 z-50 flex flex-col items-center justify-center">
-                            <div className="loader-ring mb-4"><div></div><div></div><div></div></div>
-                            <div className="text-white text-xl font-bold">Generating Test...</div>
-                            <div className="text-cyan-400 font-mono mt-2">{loadingTime.toFixed(1)}s</div>
-                        </div>
-                    )}
-                    
+                    {loading && <LoadingOverlay />}
                     <Modal isOpen={!!modalConfig} message={modalConfig?.message} confirmText={modalConfig?.confirmText} onConfirm={modalConfig?.onConfirm} onCancel={() => setModalConfig(null)} />
                     
-                    {/* FEEDBACK SLIDE-OUT PANEL */}
                     <FeedbackPanel data={currentFeedback} isOpen={showFeedback} />
 
                     {/* SIDEBAR */}
