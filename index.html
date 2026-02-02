@@ -1,3 +1,9 @@
+<!-- 
+    ATAR HELPER | AI TUTOR
+    PROPERTY OF ERIC / CCPSPY
+    WILLETTON SENIOR HIGH SCHOOL
+    COPYRIGHT 2026 - ALL RIGHTS RESERVED
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -32,9 +38,9 @@
             touch-action: none;
         }
 
-        /* Glassmorphism Classes */
+        /* Premium Glassmorphism */
         .glass-panel {
-            background: rgba(15, 23, 42, 0.35); /* Increased visibility */
+            background: rgba(15, 23, 42, 0.4); 
             backdrop-filter: blur(24px);
             -webkit-backdrop-filter: blur(24px);
             border: 1px solid rgba(255, 255, 255, 0.08);
@@ -47,7 +53,7 @@
             color: white;
             transition: all 0.3s ease;
         }
-        .glass-input:focus { outline: none; border-color: #22d3ee; box-shadow: 0 0 15px rgba(34, 211, 238, 0.2); }
+        .glass-input:focus { outline: none; border-color: #22d3ee; box-shadow: 0 0 20px rgba(34, 211, 238, 0.15); }
 
         .premium-btn {
             background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%);
@@ -64,21 +70,25 @@
             text-shadow: 0 0 8px rgba(34, 211, 238, 0.8);
         }
         .premium-btn:active:not(:disabled) { transform: scale(0.98); }
-        .premium-btn:disabled { opacity: 0.5; cursor: wait; }
+        .premium-btn:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(1); }
 
-        /* Perfect Circular Loader */
+        /* Smooth Loader */
         .loader-ring { display: inline-block; position: relative; width: 64px; height: 64px; }
-        .loader-ring div { box-sizing: border-box; display: block; position: absolute; width: 50px; height: 50px; margin: 7px; border: 4px solid #22d3ee; border-radius: 50%; animation: loader-ring 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite; border-color: #22d3ee transparent transparent transparent; }
+        .loader-ring div { box-sizing: border-box; display: block; position: absolute; width: 50px; height: 50px; margin: 7px; border: 3px solid #22d3ee; border-radius: 50%; animation: loader-ring 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite; border-color: #22d3ee transparent transparent transparent; }
         .loader-ring div:nth-child(1) { animation-delay: -0.45s; }
         .loader-ring div:nth-child(2) { animation-delay: -0.3s; }
         .loader-ring div:nth-child(3) { animation-delay: -0.15s; }
         @keyframes loader-ring { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        /* Spinning Border */
+        /* Feedback Slide-in */
+        .slide-panel { transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); transform: translateX(100%); }
+        .slide-panel.open { transform: translateX(0); }
+
+        /* Sidebar Spinner */
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .spin-border { position: relative; }
         .spin-border::before {
-            content: ''; position: absolute; inset: -3px; border-radius: 50%; padding: 3px;
+            content: ''; position: absolute; inset: -2px; border-radius: 50%; padding: 2px;
             background: conic-gradient(from 0deg, transparent, #22d3ee, transparent);
             -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
             -webkit-mask-composite: xor; mask-composite: exclude;
@@ -90,8 +100,7 @@
         
         .custom-scroll::-webkit-scrollbar { width: 4px; }
         .custom-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
-
-        /* Input Slider */
+        
         input[type=range] { -webkit-appearance: none; background: transparent; }
         input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: #22d3ee; margin-top: -6px; cursor: pointer; }
         input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: rgba(255,255,255,0.2); border-radius: 2px; }
@@ -104,7 +113,7 @@
         const { useState, useEffect, useRef, useMemo, memo, useCallback } = React;
 
         // --- GLOBAL KEY STORE ---
-        let GEMINI_KEYS = []; // Loaded from GE.txt
+        let GEMINI_KEYS = []; 
         let SUBJECT_CONTEXT = ""; 
 
         // --- DECODERS ---
@@ -122,7 +131,7 @@
                     return decodeBase64(k); 
                 }).filter(k=>k);
                 console.log("Gemini Keys Active:", GEMINI_KEYS.length);
-            } catch(e) { console.warn("Key Load Error: Ensure GE.txt exists"); }
+            } catch(e) { console.warn("Key Load Error"); }
         }
 
         // --- CURRICULUM ---
@@ -161,14 +170,14 @@
                             context += content.items.map(item => item.str).join(" ") + " ";
                         }
                         i++;
-                        if(i > 20) break; 
+                        if(i > 30) break; 
                     } catch (e) { break; }
                 }
                 SUBJECT_CONTEXT = context.substring(0, 15000); 
             },
 
             callGemini: async (prompt, imageData = null, jsonMode = false) => {
-                if (GEMINI_KEYS.length === 0) throw new Error("No Gemini Keys found. Please upload GE.txt.");
+                if (GEMINI_KEYS.length === 0) throw new Error("No Gemini Keys found. Upload GE.txt.");
                 const models = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"];
                 const parts = [{ text: prompt }];
                 if (imageData) parts.push({ inline_data: { mime_type: "image/png", data: imageData } });
@@ -199,69 +208,67 @@
                     const prompt = `Role: WACE ATAR Exam Writer. Subject: ${subject} ${level} - ${topic}.
                     ${SUBJECT_CONTEXT ? 'Context: ' + SUBJECT_CONTEXT.substring(0, 3000) : ''}
                     Task: Generate a challenging single-part question.
-                    Instructions:
-                    1. Use clear English for text.
-                    2. Use LaTeX $...$ ONLY for math expressions.
-                    3. Do NOT wrap English sentences in $ signs.
-                    4. NO sub-questions (a, b, c).
-                    5. Output JSON: {"text":"Question...","topic":"${topic}","answer":"Short Answer","hint":"Hint"}.`;
+                    Output: JSON ONLY. Format: 
+                    {"text":"Question (LaTeX $...$)","topic":"${topic}","answer":"Short Answer","hint":"Hint", "marks": 3}.
+                    Constraint: Single part only. No 'a)', 'b)'. No 'Leave space'.`;
                     
                     const text = await AI_ENGINE.callGemini(prompt, null, true);
                     return JSON.parse(text);
                 } catch (e) {
                     return {
-                        text: `(Offline Mode) Evaluate $\\int (3x^2 + 2) dx$.`,
-                        topic: "Calculus",
-                        answer: "$x^3 + 2x + C$",
-                        hint: "Power Rule",
-                        isOffline: true
+                        text: `(Offline) Evaluate $\\int 5x^4 dx$.`, topic: "Calculus", answer: "$x^5 + C$", hint: "Power Rule", marks: 3, isOffline: true
+                    };
+                }
+            },
+
+            // --- SMART GRADING SYSTEM ---
+            gradeSubmission: async (userText, actualAns, questionText, canvasDataUrl) => {
+                try {
+                    const base64Image = canvasDataUrl ? canvasDataUrl.split(',')[1] : null;
+                    const prompt = `Role: Senior Teacher. Task: Grade Student.
+                    Question: ${questionText}
+                    Correct Answer: ${actualAns}
+                    Student Final Answer (Typed): ${userText}
+                    ${base64Image ? 'Student Working: See attached image.' : ''}
+                    
+                    Instructions:
+                    1. Check if the final answer is correct (allowing for formatting diffs).
+                    2. Analyze working (if image provided). Award partial marks for logic.
+                    3. Output JSON ONLY:
+                    {
+                        "mark": number (out of max marks),
+                        "maxMarks": number (from question, assume 3 if unknown),
+                        "correct": boolean (is final answer right?),
+                        "feedback": {
+                            "positives": "What they did right (LaTeX)",
+                            "negatives": "Mistakes made",
+                            "improvements": "How to fix it"
+                        }
+                    }`;
+                    
+                    const text = await AI_ENGINE.callGemini(prompt, base64Image, true);
+                    return JSON.parse(text);
+                } catch (e) {
+                    // Fallback grading
+                    const isMatch = userText.replace(/\s/g,'') === actualAns.replace(/\s/g,'');
+                    return {
+                        mark: isMatch ? 3 : 0, maxMarks: 3, correct: isMatch,
+                        feedback: { positives: "Attempted.", negatives: isMatch ? "None." : "Incorrect result.", improvements: "Check formula." }
                     };
                 }
             },
 
             ask: async (prompt, context) => {
                 try {
-                    return await AI_ENGINE.callGemini(`System: ${context}. User: ${prompt}. Reply concisely. Use LaTeX $...$ for math.`);
+                    return await AI_ENGINE.callGemini(`System: ${context}. User: ${prompt}. Reply concisely with LaTeX $...$.`);
                 } catch (e) { return "Connection failed."; }
-            },
-
-            checkAnswerText: async (user, actual, question) => {
-                try {
-                    const prompt = `Q:${question} Real:${actual} User:${user}. Is user correct? JSON: {"correct":bool,"feedback":"string"}`;
-                    const text = await AI_ENGINE.callGemini(prompt, null, true);
-                    return JSON.parse(text);
-                } catch (e) {
-                    const isMatch = user.replace(/\s/g,'') === actual.replace(/\s/g,'');
-                    return { correct: isMatch, feedback: isMatch ? "Exact match." : "Offline verification failed." };
-                }
-            },
-
-            checkWork: async (canvasDataUrl, questionText, actualAnswer) => {
-                try {
-                    const base64Image = canvasDataUrl.split(',')[1];
-                    const prompt = `Teacher Task: Mark this student's working. Q: ${questionText}. Ans: ${actualAnswer}. 
-                    Output: Brief feedback with LaTeX. State if correct.`;
-                    return await AI_ENGINE.callGemini(prompt, base64Image, false);
-                } catch (e) { return "Image analysis failed."; }
             }
         };
 
-        // --- MATH RENDERER (Improved Spacing & Detection) ---
+        // --- MATH RENDERER ---
         const MathText = ({ text }) => {
             if (!text) return null;
-            // Clean AI hallucinations
-            let clean = text.replace(/Answer:/gi, '').replace(/Step 1:/gi, '');
-            
-            // Auto-detect raw LaTeX patterns (like \frac, \int) that aren't wrapped in $ and wrap them
-            // This fixes cases where AI forgets the $ signs
-            const latexPatterns = /(\\frac\{.*?\}\{.*?\}|\\int|\\sum|\\sqrt\{.*?\}|\\times|\\theta|\\pi|\^[0-9a-z]+)/g;
-            clean = clean.replace(latexPatterns, (match, p1, offset, string) => {
-                // Check if already inside $ signs (simple check)
-                const before = string.substring(0, offset);
-                if ((before.match(/\$/g) || []).length % 2 === 1) return match; // Already inside
-                return `$${match}$`;
-            });
-
+            let clean = text.replace(/Leave space/gi, '').replace(/(\bspace\b)/gi, ' ').replace(/\\/g, '\\'); 
             const parts = clean.split(/(\$[^$]+\$)/g);
             return (
                 <div className="text-lg leading-relaxed font-sans text-slate-200">
@@ -306,11 +313,13 @@
             useEffect(() => {
                 if (teacherMarks?.length && ctxRef.current) {
                     const ctx = ctxRef.current;
-                    ctx.save(); ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 3;
+                    ctx.save(); 
                     teacherMarks.forEach((m) => {
+                        ctx.strokeStyle = m.type === 'tick' ? '#10b981' : '#ef4444'; // Green or Red
+                        ctx.lineWidth = 4;
                         ctx.beginPath();
-                        if(m.type === 'tick') { ctx.moveTo(m.x, m.y); ctx.lineTo(m.x+10, m.y+20); ctx.lineTo(m.x+40, m.y-40); }
-                        else { ctx.moveTo(m.x, m.y); ctx.lineTo(m.x+30, m.y+30); ctx.moveTo(m.x+30, m.y); ctx.lineTo(m.x, m.y+30); }
+                        if(m.type === 'tick') { ctx.moveTo(m.x, m.y); ctx.lineTo(m.x+15, m.y+30); ctx.lineTo(m.x+50, m.y-40); }
+                        else { ctx.moveTo(m.x, m.y); ctx.lineTo(m.x+40, m.y+40); ctx.moveTo(m.x+40, m.y); ctx.lineTo(m.x, m.y+40); }
                         ctx.stroke();
                     });
                     ctx.restore();
@@ -343,6 +352,37 @@
             return <canvas ref={canvasRef} onMouseDown={start} onMouseMove={move} onMouseUp={()=>setIsDrawing(false)} onMouseLeave={()=>setIsDrawing(false)} onTouchStart={start} onTouchMove={move} onTouchEnd={()=>setIsDrawing(false)} className="w-full h-full cursor-crosshair touch-none" />;
         });
 
+        // --- SIDE PANEL (FEEDBACK) ---
+        const FeedbackPanel = ({ data, isOpen }) => {
+            if (!isOpen || !data) return null;
+            return (
+                <div className={`slide-panel absolute top-0 right-0 h-full w-80 bg-slate-900/95 backdrop-blur-xl border-l border-white/10 p-6 z-40 transform transition-transform duration-500 ${isOpen ? 'translate-x-0' : 'translate-x-full'} shadow-2xl flex flex-col`}>
+                    <div className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400 mb-6 mt-16">
+                        Results: {data.mark}/{data.maxMarks}
+                    </div>
+                    
+                    <div className="space-y-4 flex-1 overflow-y-auto custom-scroll">
+                        <div className="bg-emerald-900/20 border border-emerald-500/30 p-3 rounded-xl">
+                            <div className="text-xs font-bold text-emerald-400 uppercase mb-1">What went right</div>
+                            <MathText text={data.feedback.positives} />
+                        </div>
+                        
+                        {data.mark < data.maxMarks && (
+                            <div className="bg-red-900/20 border border-red-500/30 p-3 rounded-xl">
+                                <div className="text-xs font-bold text-red-400 uppercase mb-1">Mistakes</div>
+                                <MathText text={data.feedback.negatives} />
+                            </div>
+                        )}
+                        
+                        <div className="bg-blue-900/20 border border-blue-500/30 p-3 rounded-xl">
+                            <div className="text-xs font-bold text-blue-400 uppercase mb-1">Improvements</div>
+                            <MathText text={data.feedback.improvements} />
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
         const Modal = ({ isOpen, message, onConfirm, onCancel, confirmText="Yes" }) => {
             if (!isOpen) return null;
             return (
@@ -360,10 +400,14 @@
         };
 
         const ReportCard = ({ questions, timer, user, subject, level, onClose }) => {
-            const correct = questions.filter(q => q.status === 'correct').length;
-            const score = Math.round((correct / questions.length) * 100);
+            const totalMarks = questions.reduce((acc, q) => acc + (q.userMark || 0), 0);
+            const maxMarks = questions.reduce((acc, q) => acc + (q.maxMarks || 3), 0);
+            const percent = Math.round((totalMarks/maxMarks)*100) || 0;
+
             const downloadReport = () => {
-                const text = `ATAR HELPER REPORT\nName: ${user}\nSubject: ${subject} ${level}\nScore: ${score}%\nTime: ${Math.floor(timer/60)}m ${timer%60}s\n\nBREAKDOWN:\n${questions.map((q,i) => `Q${i+1}: ${q.status.toUpperCase()}`).join('\n')}`;
+                const text = `ATAR HELPER REPORT\nName: ${user}\nSubject: ${subject} ${level}\nScore: ${totalMarks}/${maxMarks} (${percent}%)\nTime: ${Math.floor(timer/60)}m ${timer%60}s\n\nBREAKDOWN:\n${questions.map((q,i) => 
+                    `Q${i+1} [${q.topic}]: ${q.userMark}/${q.maxMarks || 3}\nQuestion: ${q.text}\nYour Answer: ${q.userAns}\nFeedback: ${q.feedback?.improvements || 'None'}`
+                ).join('\n\n----------------\n\n')}`;
                 const blob = new Blob([text], { type: 'text/plain' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -372,13 +416,13 @@
             return (
                 <div className="absolute inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4 animate-fade-in">
                     <div className="glass-panel p-8 rounded-3xl max-w-2xl w-full border border-white/10">
-                        <h2 className="text-3xl font-bold text-center mb-6 bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">Report Card</h2>
+                        <h2 className="text-3xl font-bold text-center mb-6 bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">Final Report</h2>
                         <div className="grid grid-cols-2 gap-4 mb-6">
-                            <div className="bg-white/5 p-4 rounded-xl text-center"><div className="text-sm text-slate-400">SCORE</div><div className="text-4xl font-bold text-white">{score}%</div></div>
+                            <div className="bg-white/5 p-4 rounded-xl text-center"><div className="text-sm text-slate-400">SCORE</div><div className="text-4xl font-bold text-white">{percent}%</div></div>
                             <div className="bg-white/5 p-4 rounded-xl text-center"><div className="text-sm text-slate-400">TIME</div><div className="text-4xl font-bold text-white">{Math.floor(timer/60)}m {timer%60}s</div></div>
                         </div>
                         <div className="flex gap-4">
-                            <button onClick={downloadReport} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-xl transition">Download</button>
+                            <button onClick={downloadReport} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-xl transition">Download Report</button>
                             <button onClick={onClose} className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold py-3 rounded-xl shadow-lg transition">Menu</button>
                         </div>
                     </div>
@@ -413,6 +457,10 @@
             const [timer, setTimer] = useState(0);
             const [modalConfig, setModalConfig] = useState(null);
             
+            // New Grading State
+            const [currentFeedback, setCurrentFeedback] = useState(null);
+            const [showFeedback, setShowFeedback] = useState(false);
+            
             const [wbTool, setWbTool] = useState('pen');
             const [wbColor, setWbColor] = useState('#a5f3fc');
             const [wbSize, setWbSize] = useState(2);
@@ -441,9 +489,11 @@
 
             useEffect(() => {
                 let interval;
-                if (view === 'test' && questions[currentQIndex]?.status === 'ready') interval = setInterval(() => setTimer(t => t + 1), 1000);
+                if (view === 'test' && questions[currentQIndex]?.status === 'ready' && !showFeedback) {
+                    interval = setInterval(() => setTimer(t => t + 1), 1000);
+                }
                 return () => clearInterval(interval);
-            }, [view, questions, currentQIndex]);
+            }, [view, questions, currentQIndex, showFeedback]);
 
             useEffect(() => {
                 let interval;
@@ -454,7 +504,7 @@
 
             const backgroundGenerator = async (count, topics) => {
                 const q1 = await AI_ENGINE.generateQuestion(subject, level, topics);
-                setQuestions(prev => { const n = [...prev]; n[0] = { ...q1, status: 'ready' }; return n; });
+                setQuestions(prev => { const n = [...prev]; n[0] = { ...q1, status: 'ready', maxMarks: 3 }; return n; });
                 setLoading(false);
                 setView('test');
 
@@ -462,7 +512,7 @@
                     await new Promise(r => setTimeout(r, 2000));
                     while(genPaused.current) await new Promise(r => setTimeout(r, 1000));
                     const q = await AI_ENGINE.generateQuestion(subject, level, topics);
-                    setQuestions(prev => { const n = [...prev]; if(n[i]) n[i] = { ...q, status: 'ready' }; return n; });
+                    setQuestions(prev => { const n = [...prev]; if(n[i]) n[i] = { ...q, status: 'ready', maxMarks: 3 }; return n; });
                 }
             };
 
@@ -471,102 +521,124 @@
                 setQuestions(Array(questionCount).fill({ status: 'generating', text: 'Loading...', answer: '' }));
                 setMessages([{ role: 'system', text: `Hi ${user}, good luck!` }]);
                 setTeacherMarks([]); setClearBoardTrig(p => p+1); hasDrawn.current = false;
-                setTimer(0); setCurrentQIndex(0); setUserAns('');
+                setTimer(0); setCurrentQIndex(0); setUserAns(''); setShowFeedback(false);
                 await backgroundGenerator(questionCount, selectedTopics);
             };
 
-            const handleInteract = async (type) => {
+            // 1. EVALUATE: Just hints, no lock
+            const handleEvaluate = async () => {
+                if(isProcessing) return;
+                setIsProcessing(true);
+                setGenPaused(true);
+                const q = questions[currentQIndex];
+                
+                setMessages(p => [...p, { role: 'ai', text: "Looking at your working..." }]);
+                
                 try {
-                    setGenPaused(true);
-                    setIsProcessing(true);
-                    const q = questions[currentQIndex];
-
-                    if (type === 'evaluate') {
-                        setMessages(p => [...p, { role: 'ai', text: "Analyzing board..." }]);
-                        if (hasDrawn.current && canvasRef.current) {
-                            const img = canvasRef.current.current.toDataURL('image/png');
-                            const feedback = await AI_ENGINE.checkWork(img, q.text, q.answer);
-                            setMessages(p => [...p, { role: 'ai', text: feedback }]);
-                        } else {
-                            setMessages(p => [...p, { role: 'ai', text: "Board empty. Try writing first." }]);
-                        }
+                    let hint = "Board empty.";
+                    if (hasDrawn.current && canvasRef.current) {
+                        const img = canvasRef.current.current.toDataURL('image/png');
+                        hint = await AI_ENGINE.checkWork(img, q.text, q.answer); // Vision check only
+                    } else {
+                        hint = await AI_ENGINE.ask("Give me a hint for this question.", `Q: ${q.text}`);
                     }
-                    else if (type === 'submit') {
-                        if (!userAns) return;
-                        setMessages(p => [...p, { role: 'user', text: `Submitted: ${userAns}` }, { role: 'ai', text: "Checking..." }]);
-                        const check = await AI_ENGINE.checkAnswerText(userAns, q.answer, q.text);
-                        setMessages(p => [...p, { role: 'ai', text: check.feedback }]);
-                        if (check.correct) {
-                            setTeacherMarks([{ type: 'tick', x: 200, y: 200 }]);
-                            setQuestions(p => { const n = [...p]; n[currentQIndex].status = 'correct'; return n; });
-                        } else {
-                            setTeacherMarks([{ type: 'cross', x: 200, y: 200 }]);
-                        }
-                    }
-                    else if (type === 'giveup') {
-                        setModalConfig({
-                            message: "Show answer?", confirmText: "Yes",
-                            onConfirm: () => {
-                                setMessages(p => [...p, { role: 'ai', text: `Answer: ${q.answer}` }]);
-                                setQuestions(p => { const n = [...p]; n[currentQIndex].status = 'wrong'; return n; });
-                                setTeacherMarks([{ type: 'cross', x: 200, y: 200 }]);
-                                setModalConfig(null);
-                            },
-                            onCancel: () => setModalConfig(null)
-                        });
-                    }
-                } finally {
-                    setIsProcessing(false);
-                    setGenPaused(false);
-                }
+                    setMessages(p => [...p, { role: 'ai', text: hint }]);
+                } catch(e) {} 
+                setIsProcessing(false);
+                setGenPaused(false);
             };
 
-            const handleChat = async () => {
-                if (!chatInput.trim() || isProcessing) return;
-                try {
-                    setIsProcessing(true);
-                    setGenPaused(true);
-                    const txt = chatInput; setChatInput('');
-                    setMessages(p => [...p, { role: 'user', text: txt }, { role: 'ai', text: "..." }]);
-                    const q = questions[currentQIndex];
-                    const res = await AI_ENGINE.ask(txt, `Q:${q.text} A:${q.answer}`);
-                    setMessages(p => { const n = [...p]; n.pop(); return [...n, { role: 'ai', text: res }]; });
-                } finally {
-                    setIsProcessing(false);
-                    setGenPaused(false);
-                }
+            // 2. SUBMIT: Locks question, Grades it, Shows Panel
+            const handleSubmit = async () => {
+                if(!userAns.trim() || isProcessing) return;
+                setIsProcessing(true);
+                setGenPaused(true);
+                
+                const q = questions[currentQIndex];
+                setMessages(p => [...p, { role: 'user', text: `Submitted: ${userAns}` }, { role: 'ai', text: "Grading..." }]);
+
+                // Capture image for grading context
+                let img = null;
+                if(hasDrawn.current && canvasRef.current) img = canvasRef.current.current.toDataURL('image/png');
+
+                // Advanced Grading
+                const result = await AI_ENGINE.gradeSubmission(userAns, q.answer, q.text, img);
+                
+                // Update State
+                setQuestions(prev => {
+                    const n = [...prev];
+                    n[currentQIndex] = { 
+                        ...n[currentQIndex], 
+                        status: result.correct ? 'correct' : 'wrong',
+                        userMark: result.mark,
+                        userAns: userAns,
+                        feedback: result.feedback
+                    };
+                    return n;
+                });
+
+                // Visuals
+                if (result.mark > 0) setTeacherMarks([{ type: 'tick', x: 200, y: 200 }]);
+                else setTeacherMarks([{ type: 'cross', x: 200, y: 200 }]);
+
+                setCurrentFeedback(result);
+                setShowFeedback(true);
+                setIsProcessing(false);
+                setGenPaused(false);
+            };
+
+            const handleGiveUp = () => {
+                setModalConfig({
+                    message: "Show answer? (0 Marks)", confirmText: "Yes",
+                    onConfirm: () => {
+                        const q = questions[currentQIndex];
+                        setQuestions(prev => {
+                            const n = [...prev]; 
+                            n[currentQIndex].status = 'wrong'; 
+                            n[currentQIndex].userMark = 0;
+                            n[currentQIndex].feedback = { positives: "Skipped", negatives: "Gave up", improvements: "Review topic." };
+                            return n;
+                        });
+                        setTeacherMarks([{ type: 'cross', x: 200, y: 200 }]);
+                        setMessages(p => [...p, { role: 'ai', text: `Answer: ${q.answer}` }]);
+                        setModalConfig(null);
+                    },
+                    onCancel: () => setModalConfig(null)
+                });
             };
 
             const changeQuestion = (idx) => {
                 if (questions[idx].status === 'generating' || isProcessing) return;
                 setCurrentQIndex(idx);
                 setTeacherMarks([]); setClearBoardTrig(p => p+1); hasDrawn.current = false; setUserAns('');
+                setShowFeedback(false);
             };
 
-            const allDone = questions.every(q => q.status === 'correct' || q.status === 'wrong');
+            const handleChat = async () => {
+                if (!chatInput.trim() || isProcessing) return;
+                setIsProcessing(true);
+                const txt = chatInput; setChatInput('');
+                setMessages(p => [...p, { role: 'user', text: txt }, { role: 'ai', text: "..." }]);
+                const res = await AI_ENGINE.ask(txt, `Q:${questions[currentQIndex]?.text}`);
+                setMessages(p => { const n = [...p]; n.pop(); return [...n, { role: 'ai', text: res }]; });
+                setIsProcessing(false);
+            };
+
             const currentQ = questions[currentQIndex] || { status: 'generating' };
-            const isQLoading = currentQ.status === 'generating';
+            const isGraded = currentQ.status === 'correct' || currentQ.status === 'wrong';
+            const allDone = questions.every(q => q.status === 'correct' || q.status === 'wrong');
 
-            // RENDER
-            // --- Loading Overlay (Always Top) ---
-            const LoadingOverlay = () => (
-                <div className="absolute inset-0 bg-black/90 z-50 flex flex-col items-center justify-center">
-                    <div className="loader-ring mb-4"><div></div><div></div><div></div></div>
-                    <div className="text-white text-xl font-bold">Generating Test...</div>
-                    <div className="text-cyan-400 font-mono mt-2">{loadingTime.toFixed(1)}s</div>
-                    <div className="text-slate-500 text-xs mt-1">Est: {questionCount * 2.5}s</div>
-                </div>
-            );
-
+            // --- RENDER ---
             if (view === 'menu') return (
                 <div className="fixed inset-0 flex flex-col items-center justify-center p-4">
                     {dbStatus === false && <div className="absolute top-10 right-10 text-xs text-red-400 border border-red-500/20 p-2 rounded glass-panel">No Database (Cloud Mode)</div>}
                     <div className="glass-panel p-10 rounded-3xl w-full max-w-lg text-center animate-fade-in">
                         <h1 className="text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-600 mb-2">ATAR Helper</h1>
-                        <div className="flex justify-between text-xs opacity-50 mb-8 px-4"><span>BY ERIC</span><span>WILLETTON SHS</span></div>
-                        <input className="w-full glass-input p-4 rounded-xl mb-4" placeholder="Enter Name..." value={user} onChange={e=>setUser(e.target.value)} />
+                        <div className="flex justify-between text-xs opacity-50 mb-8 px-4"><span>BY ERIC / CCPSPY</span><span>WILLETTON SHS</span></div>
+                        <input className="w-full glass-input p-4 rounded-xl mb-4" placeholder="Enter Name..." value={user} onChange={e=>setUser(e.target.value.toUpperCase())} />
                         <button onClick={()=>user && setView('setup')} className="w-full premium-btn text-white font-bold p-4 rounded-xl">Start Session</button>
                     </div>
+                    <div className="absolute bottom-4 text-[10px] text-slate-600 opacity-60">© 2026 Eric/CCPSPY | Willetton SHS</div>
                 </div>
             );
 
@@ -616,7 +688,6 @@
                             <button onClick={startTest} className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold py-3 rounded-xl shadow-lg">Start Test</button>
                         </div>
                     </div>
-                    {loading && <LoadingOverlay />}
                 </div>
             );
 
@@ -625,10 +696,18 @@
             // TEST VIEW
             return (
                 <div className="fixed inset-0 flex overflow-hidden bg-black/40 backdrop-blur-sm">
-                    {loading && <LoadingOverlay />}
+                    {loading && (
+                        <div className="absolute inset-0 bg-black/90 z-50 flex flex-col items-center justify-center">
+                            <div className="loader-ring mb-4"><div></div><div></div><div></div></div>
+                            <div className="text-white text-xl font-bold">Generating Test...</div>
+                            <div className="text-cyan-400 font-mono mt-2">{loadingTime.toFixed(1)}s</div>
+                        </div>
+                    )}
+                    
                     <Modal isOpen={!!modalConfig} message={modalConfig?.message} confirmText={modalConfig?.confirmText} onConfirm={modalConfig?.onConfirm} onCancel={() => setModalConfig(null)} />
                     
-                    {currentQ.isOffline && <div className="absolute top-0 w-full bg-yellow-500/80 text-black text-xs font-bold text-center py-1 z-50">⚠ Offline Mode</div>}
+                    {/* FEEDBACK SLIDE-OUT PANEL */}
+                    <FeedbackPanel data={currentFeedback} isOpen={showFeedback} />
 
                     {/* SIDEBAR */}
                     <div className="w-20 glass-panel border-r border-white/5 flex flex-col items-center py-6 gap-4 pt-24 z-30">
@@ -662,7 +741,7 @@
                         </div>
 
                         <div className="flex-1 relative cursor-crosshair flex flex-col">
-                            {!isQLoading && <Whiteboard getCanvasRef={(ref) => canvasRef.current = ref} tool={wbTool} color={wbColor} size={wbSize} triggerClear={clearBoardTrig} teacherMarks={teacherMarks} hasDrawnRef={hasDrawn} />}
+                            {!currentQ.status?.includes('generating') && <Whiteboard getCanvasRef={(ref) => canvasRef.current = ref} tool={wbTool} color={wbColor} size={wbSize} triggerClear={clearBoardTrig} teacherMarks={teacherMarks} hasDrawnRef={hasDrawn} />}
                             
                             <div className="absolute top-20 left-10 right-10 pointer-events-none select-none">
                                 <div className="glass-panel p-6 rounded-2xl border-l-4 border-cyan-500 max-w-2xl animate-fade-in">
@@ -671,10 +750,18 @@
                                 </div>
                             </div>
 
-                            {!isQLoading && (
+                            {!currentQ.status?.includes('generating') && (
                                 <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xl glass-panel p-2 rounded-xl flex gap-2 z-20">
-                                    <input value={userAns} onChange={e=>setUserAns(e.target.value)} onKeyPress={e=>e.key==='Enter'&&handleInteract('submit')} placeholder="Type final answer..." className="flex-1 bg-black/20 text-white px-4 py-2 rounded-lg focus:outline-none" />
-                                    <button onClick={()=>handleInteract('submit')} disabled={isProcessing || currentQ.status==='correct'} className="premium-btn px-6 text-white font-bold rounded-lg bg-cyan-600/50">Submit</button>
+                                    <input value={userAns} onChange={e=>setUserAns(e.target.value)} onKeyPress={e=>e.key==='Enter'&&handleSubmit()} placeholder="Type final answer..." className="flex-1 bg-black/20 text-white px-4 py-2 rounded-lg focus:outline-none" />
+                                    {isGraded ? (
+                                        <button onClick={() => currentQIndex < questions.length - 1 ? changeQuestion(currentQIndex + 1) : null}
+                                            disabled={currentQIndex >= questions.length - 1}
+                                            className="premium-btn bg-purple-600/50 text-white font-bold py-2 px-6 rounded-lg shadow-lg disabled:opacity-50">
+                                            Next Q
+                                        </button>
+                                    ) : (
+                                        <button onClick={handleSubmit} disabled={isProcessing} className="premium-btn bg-cyan-600/50 text-white font-bold py-2 px-6 rounded-lg shadow-lg disabled:opacity-50">Submit</button>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -695,8 +782,8 @@
                                 <button onClick={()=>setView('report')} className="w-full mb-3 bg-gradient-to-r from-yellow-600 to-orange-600 text-white font-bold py-3 rounded-lg shadow-lg">Finish Test</button>
                             ) : (
                                 <div className="grid grid-cols-2 gap-2 mb-3">
-                                    <button onClick={()=>handleInteract('giveup')} disabled={isProcessing || currentQ.status==='correct'} className="premium-btn bg-slate-700/50 text-slate-300 py-2 rounded-lg text-sm">Give Up</button>
-                                    <button onClick={()=>handleInteract('evaluate')} disabled={isProcessing || currentQ.status==='correct'} className="premium-btn bg-emerald-600/50 text-white py-2 rounded-lg text-sm">Evaluate</button>
+                                    <button onClick={handleGiveUp} disabled={isProcessing || isGraded} className="premium-btn bg-slate-700/50 text-slate-300 py-2 rounded-lg text-sm">Give Up</button>
+                                    <button onClick={handleEvaluate} disabled={isProcessing || isGraded} className="premium-btn bg-emerald-600/50 text-white py-2 rounded-lg text-sm">Evaluate</button>
                                 </div>
                             )}
                             <div className="flex gap-2">
