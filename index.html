@@ -20,9 +20,11 @@
     <!-- KaTeX for Math Rendering -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-    <!-- PDF.js -->
+    <!-- PDF.js (Reading) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+    <!-- jsPDF (Writing Reports) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -128,7 +130,7 @@
                     if(k.startsWith("AIza")) return k; 
                     return decodeBase64(k); 
                 }).filter(k=>k);
-                console.log("Gemini Keys:", GEMINI_KEYS.length);
+                console.log("Gemini Keys Active:", GEMINI_KEYS.length);
             } catch(e) { console.warn("Key Load Error"); }
         }
 
@@ -203,46 +205,83 @@
                 try {
                     const prompt = `Role: WACE ATAR Exam Writer. Subject: ${subject} ${level} - ${topic}.
                     ${SUBJECT_CONTEXT ? 'Context: ' + SUBJECT_CONTEXT.substring(0, 3000) : ''}
-                    Task: Generate a challenging single-part question.
-                    Output: JSON ONLY. Format: {"text":"Question (LaTeX $...$)","topic":"${topic}","answer":"Short Answer","hint":"Hint", "marks": 3}.
-                    Constraint: Single part only. No 'a)', 'b)'. No 'Leave space'.`;
+                    Task: Generate a single exam question.
+                    Output: JSON ONLY. Format: 
+                    {"text":"Question (LaTeX $...$)","topic":"${topic}","answer":"Short Answer","hint":"Hint", "marks": 3}.
+                    Constraints:
+                    1. No sub-questions (a, b). 
+                    2. No words like 'space', 'blank page'.
+                    3. Ensure LaTeX is clean (no \\begin{enumerate}).
+                    4. Assign a mark value (usually 2-5).`;
+                    
                     const text = await AI_ENGINE.callGemini(prompt, null, true);
                     return JSON.parse(text);
                 } catch (e) {
-                    return { text: `(Offline) Evaluate $\\int 5x^4 dx$.`, topic: "Calculus", answer: "$x^5 + C$", hint: "Power Rule", marks: 3, isOffline: true };
+                    return {
+                        text: `(Offline) Evaluate $\\int 5x^4 dx$.`, topic: "Calculus", answer: "$x^5 + C$", hint: "Power Rule", marks: 3, isOffline: true
+                    };
                 }
             },
 
-            gradeSubmission: async (userText, actualAns, questionText, canvasDataUrl) => {
+            gradeSubmission: async (userText, actualAns, questionText, canvasDataUrl, maxMarks) => {
                 try {
                     const base64Image = canvasDataUrl ? canvasDataUrl.split(',')[1] : null;
-                    const prompt = `Role: Senior Teacher. Task: Grade Student. Q: ${questionText}. Correct: ${actualAns}. Student: ${userText}.
-                    Output JSON ONLY: {"mark": number, "maxMarks": number, "correct": boolean, "feedback": {"positives": "str", "negatives": "str", "improvements": "str"}}`;
+                    const prompt = `Role: Senior Teacher. Task: Grade Student.
+                    Question: ${questionText}
+                    Correct Answer: ${actualAns}
+                    Student Final Answer (Typed): ${userText}
+                    Max Marks: ${maxMarks}
+                    
+                    Instructions:
+                    1. Check if final answer is correct.
+                    2. If image provided, analyze working out. Award partial marks for logic.
+                    3. Be concise.
+                    
+                    Output JSON ONLY:
+                    {
+                        "mark": number,
+                        "correct": boolean,
+                        "feedback": {
+                            "positives": "Good points",
+                            "negatives": "Mistakes",
+                            "improvements": "How to fix"
+                        }
+                    }`;
+                    
                     const text = await AI_ENGINE.callGemini(prompt, base64Image, true);
                     return JSON.parse(text);
                 } catch (e) {
                     const isMatch = userText.replace(/\s/g,'') === actualAns.replace(/\s/g,'');
-                    return { mark: isMatch ? 3 : 0, maxMarks: 3, correct: isMatch, feedback: { positives: "Attempted.", negatives: "Check answer.", improvements: "Review formula." } };
+                    return { mark: isMatch ? maxMarks : 0, correct: isMatch, feedback: { positives: "Attempted.", negatives: isMatch ? "None." : "Incorrect.", improvements: "Check formula." } };
                 }
             },
 
             ask: async (prompt, context) => {
-                try { return await AI_ENGINE.callGemini(`System: ${context}. User: ${prompt}. Reply concise LaTeX.`); } 
-                catch (e) { return "Connection failed."; }
+                try {
+                    return await AI_ENGINE.callGemini(`System: ${context}. User: ${prompt}. Reply concisely (max 2 sentences). Use LaTeX $...$ for math. No lists.`);
+                } catch (e) { return "Connection failed."; }
             },
 
             checkWork: async (canvasDataUrl, questionText, actualAnswer) => {
                 try {
                     const base64Image = canvasDataUrl.split(',')[1]; 
-                    const prompt = `Teacher Task: Mark working. Q: ${questionText}. Ans: ${actualAnswer}. Output: Brief feedback LaTeX.`;
+                    const prompt = `Teacher Task: Check this working. Q: ${questionText}. Ans: ${actualAnswer}.
+                    Output: 1 sentence hint/feedback.`;
                     return await AI_ENGINE.callGemini(prompt, base64Image, false);
                 } catch (e) { return "Image analysis failed."; }
             }
         };
 
+        // --- MATH RENDERER ---
         const MathText = ({ text }) => {
             if (!text) return null;
-            let clean = text.replace(/Leave space/gi, '').replace(/(\bspace\b)/gi, ' ').replace(/\\/g, '\\'); 
+            let clean = text
+                .replace(/Leave space/gi, '')
+                .replace(/(\bspace\b)/gi, ' ')
+                .replace(/\\begin\{enumerate\}/g, '')
+                .replace(/\\end\{enumerate\}/g, '')
+                .replace(/\\item/g, '•')
+                .replace(/\\/g, '\\'); 
             const parts = clean.split(/(\$[^$]+\$)/g);
             return (
                 <div className="text-lg leading-relaxed font-sans text-slate-200">
@@ -256,6 +295,7 @@
             );
         };
 
+        // --- COMPONENTS ---
         const Whiteboard = memo(({ tool, color, size, triggerClear, teacherMarks, hasDrawnRef, getCanvasRef }) => {
             const canvasRef = useRef(null);
             const ctxRef = useRef(null);
@@ -327,7 +367,7 @@
         const FeedbackPanel = ({ data, isOpen }) => {
             if (!isOpen || !data) return null;
             return (
-                <div className={`slide-panel absolute top-0 right-0 h-full w-80 bg-slate-900/95 backdrop-blur-xl border-l border-white/10 p-6 z-40 transform transition-transform duration-500 ${isOpen ? 'translate-x-0' : 'translate-x-full'} shadow-2xl flex flex-col`}>
+                <div className={`slide-panel absolute top-0 right-96 h-full w-80 bg-slate-900/95 backdrop-blur-xl border-x border-white/10 p-6 z-40 transform transition-transform duration-500 ${isOpen ? 'translate-x-0' : 'translate-x-full'} shadow-2xl flex flex-col`}>
                     <div className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400 mb-6 mt-16">Results: {data.mark}/{data.maxMarks}</div>
                     <div className="space-y-4 flex-1 overflow-y-auto custom-scroll">
                         <div className="bg-emerald-900/20 border border-emerald-500/30 p-3 rounded-xl"><div className="text-xs font-bold text-emerald-400 uppercase mb-1">Good</div><MathText text={data.feedback.positives} /></div>
@@ -359,11 +399,40 @@
             const maxMarks = questions.reduce((acc, q) => acc + (q.maxMarks || 3), 0);
             const percent = Math.round((totalMarks/maxMarks)*100) || 0;
             const downloadReport = () => {
-                const text = `ATAR HELPER REPORT\nName: ${user}\nSubject: ${subject} ${level}\nScore: ${totalMarks}/${maxMarks} (${percent}%)\nTime: ${Math.floor(timer/60)}m ${timer%60}s\n\nBREAKDOWN:\n${questions.map((q,i) => `Q${i+1}: ${q.userMark}/${q.maxMarks}\nQ: ${q.text}\nA: ${q.userAns}\nFB: ${q.feedback?.improvements}`).join('\n\n')}`;
-                const blob = new Blob([text], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a'); a.href = url; a.download = `Report_${user}.txt`; a.click();
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(22);
+                doc.text("ATAR HELPER REPORT", 105, 20, null, null, "center");
+                
+                doc.setFontSize(12);
+                doc.setFont("helvetica", "normal");
+                doc.text(`Student: ${user}`, 20, 40);
+                doc.text(`Subject: ${subject} ${level}`, 20, 50);
+                doc.text(`Score: ${totalMarks}/${maxMarks} (${percent}%)`, 20, 60);
+                doc.text(`Time: ${Math.floor(timer/60)}m ${timer%60}s`, 20, 70);
+
+                doc.line(20, 75, 190, 75);
+
+                let y = 85;
+                questions.forEach((q, i) => {
+                    if (y > 270) { doc.addPage(); y = 20; }
+                    doc.setFont("helvetica", "bold");
+                    doc.text(`Q${i+1} [${q.topic}] - ${q.userMark}/${q.maxMarks}`, 20, y);
+                    y += 7;
+                    doc.setFont("helvetica", "normal");
+                    const qText = doc.splitTextToSize(`Q: ${q.text.substring(0, 100)}...`, 170);
+                    doc.text(qText, 20, y);
+                    y += qText.length * 5 + 2;
+                    doc.setTextColor(100);
+                    doc.text(`Feedback: ${q.feedback?.improvements || 'None'}`, 20, y);
+                    doc.setTextColor(0);
+                    y += 15;
+                });
+
+                doc.save(`Report_${user}.pdf`);
             };
+
             return (
                 <div className="absolute inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4 animate-fade-in">
                     <div className="glass-panel p-8 rounded-3xl max-w-2xl w-full border border-white/10">
@@ -373,7 +442,7 @@
                             <div className="bg-white/5 p-4 rounded-xl text-center"><div className="text-sm text-slate-400">TIME</div><div className="text-4xl font-bold text-white">{Math.floor(timer/60)}m {timer%60}s</div></div>
                         </div>
                         <div className="flex gap-4">
-                            <button onClick={downloadReport} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-xl transition">Download Report</button>
+                            <button onClick={downloadReport} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-xl transition">Download PDF</button>
                             <button onClick={onClose} className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold py-3 rounded-xl shadow-lg transition">Menu</button>
                         </div>
                     </div>
@@ -387,16 +456,19 @@
             const [subject, setSubject] = useState('Methods');
             const [level, setLevel] = useState('Year 12');
             const [dbStatus, setDbStatus] = useState(null);
+            
             const [selectedUnit, setSelectedUnit] = useState('Whole Year');
             const [availableTopics, setAvailableTopics] = useState([]);
             const [selectedTopics, setSelectedTopics] = useState([]);
             const [questionCount, setQuestionCount] = useState(5);
+            
             const [questions, setQuestions] = useState([]);
             const [currentQIndex, setCurrentQIndex] = useState(0);
             const [messages, setMessages] = useState([]);
             const [chatInput, setChatInput] = useState('');
             const [userAns, setUserAns] = useState('');
             const [teacherMarks, setTeacherMarks] = useState([]);
+            
             const [loading, setLoading] = useState(false);
             const [loadingTime, setLoadingTime] = useState(0);
             const [isProcessing, setIsProcessing] = useState(false);
@@ -483,13 +555,17 @@
                 setMessages(p => [...p, { role: 'user', text: `Submitted: ${userAns}` }, { role: 'ai', text: "Grading..." }]);
                 let img = null;
                 if(hasDrawn.current && canvasRef.current) img = canvasRef.current.current.toDataURL('image/png');
-                const result = await AI_ENGINE.gradeSubmission(userAns, q.answer, q.text, img);
+                
+                const result = await AI_ENGINE.gradeSubmission(userAns, q.answer, q.text, img, q.maxMarks || 3);
+                
                 setQuestions(prev => {
                     const n = [...prev];
                     n[currentQIndex] = { ...n[currentQIndex], status: result.correct ? 'correct' : 'wrong', userMark: result.mark, userAns: userAns, feedback: result.feedback };
                     return n;
                 });
+                
                 if (result.mark > 0) setTeacherMarks([{ type: 'tick', x: 200, y: 200 }]); else setTeacherMarks([{ type: 'cross', x: 200, y: 200 }]);
+                
                 setCurrentFeedback(result); setShowFeedback(true); setIsProcessing(false); setGenPaused(false);
             };
 
@@ -526,7 +602,7 @@
             const isGraded = currentQ.status === 'correct' || currentQ.status === 'wrong';
             const allDone = questions.every(q => q.status === 'correct' || q.status === 'wrong');
 
-            // --- VIEW RENDERERS ---
+            // --- RENDERERS ---
             const LoadingOverlay = () => (
                 <div className="absolute inset-0 bg-black/90 z-50 flex flex-col items-center justify-center">
                     <div className="loader-ring mb-4"><div></div><div></div><div></div></div>
@@ -609,7 +685,7 @@
                     <FeedbackPanel data={currentFeedback} isOpen={showFeedback} />
 
                     {/* SIDEBAR */}
-                    <div className="w-20 glass-panel border-r border-white/5 flex flex-col items-center py-6 gap-4 pt-24 z-30">
+                    <div className="w-20 glass-panel border-r border-white/5 flex flex-col items-center py-6 gap-4 pt-28 z-30">
                         <button onClick={()=>{if(confirm("Exit?")) setView('topics')}} className="text-slate-400 hover:text-red-400 mb-2"><i className="fa-solid fa-arrow-left"></i></button>
                         <div className="flex-1 w-full flex flex-col items-center gap-3 overflow-y-auto custom-scroll">
                             {questions.map((q, i) => (
@@ -667,7 +743,7 @@
                     </div>
 
                     {/* AI Sidebar */}
-                    <div className="w-80 glass-panel border-l border-white/5 flex flex-col z-30">
+                    <div className="w-96 glass-panel border-l border-white/5 flex flex-col z-30">
                         <div className="p-4 border-b border-white/5 font-bold text-white"><i className="fa-solid fa-robot text-cyan-400 mr-2"></i> Tutor</div>
                         <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scroll">
                             {messages.map((m, i) => (
