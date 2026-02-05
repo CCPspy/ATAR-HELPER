@@ -142,16 +142,6 @@
             "gemini-2.0-flash",
             "gemini-2.0-flash-lite"
         ]; 
-        
-        // Emergency Fallback Keys (Encoded)
-        const FALLBACK_KEYS = [
-            "QUl6YVN5Qnh1Y2hfQmQ3bkRPWVhfTFdScW52dmI1OWRIRDMxTF93",
-            "QUl6YVN5QWJxOTNNajVlejlUWnhDWl9pWTlMc1R0LWt1S0JUUWZr",
-            "QUl6YVN5QmtkY1kxdDJWS0QyVFN5dGxMWVlPNGFwWmFDV3M0Yy00",
-            "QUl6YVN5Q1dNM19NYUxjZVVMM1JtOHIxLU1LX0dJaHBzNFU3bk9Taw==",
-            "QUl6YVN5Q3pmaWFGUllzeTRxZjl5dFNsY1ZQb2EzY1hfSnFzaWhB"
-        ];
-
         const SUBJECT_DATA = {
             "Methods": ["Calculus", "Functions & Graphs", "Probability", "Statistics", "Integrals", "Trigonometry"],
             "Specialist": ["Vectors", "Complex Numbers", "Matrices", "Dynamics", "Combinatorics", "Differential Equations"],
@@ -168,7 +158,9 @@
             if (!str) return null;
             try {
                 const trimmed = str.trim();
+                // If it already looks like a key
                 if (trimmed.startsWith("AIza")) return trimmed;
+                // Attempt Base64 Decode
                 const decoded = atob(trimmed);
                 if (decoded && decoded.includes("AIza")) return decoded.trim();
                 return null;
@@ -218,7 +210,7 @@
                 parts.forEach((part) => {
                     if (part.startsWith('$') && part.endsWith('$')) { 
                         const span = document.createElement('span');
-                        const mathContent = part.slice(1, -1);
+                        const mathContent = part.slice(1, -1); // Remove $
                         try {
                             katex.render(mathContent, span, { throwOnError: false, displayMode: false });
                         } catch(e) { span.innerText = part; }
@@ -302,7 +294,7 @@
                 return () => clearInterval(interval);
             }, [view]);
 
-            // Robust Key Loading with Fallback
+            // Robust Key Loading
             useEffect(() => {
                 fetch('GE.txt')
                     .then(r => r.ok ? r.text() : Promise.reject())
@@ -314,15 +306,8 @@
                             if (k) { validKey = k; break; }
                         }
                         if (validKey) setUser(u => ({ ...u, apiKey: validKey }));
-                        else throw new Error("No valid key in GE.txt");
                     })
-                    .catch(() => {
-                        // Use random fallback key
-                        console.log("Using Fallback Key");
-                        const fallback = FALLBACK_KEYS[Math.floor(Math.random() * FALLBACK_KEYS.length)];
-                        const k = decodeKey(fallback);
-                        if(k) setUser(u => ({ ...u, apiKey: k }));
-                    });
+                    .catch(() => console.log("No GE.txt"));
             }, []);
 
             const handleFileUpload = async (e) => {
@@ -346,12 +331,14 @@
             };
 
             const loadSubjectContext = async () => {
+                // If NO API key -> Offline Mode
                 if (!user.apiKey) {
                     setContextStatus("offline");
                     startSession();
                     return;
                 }
 
+                // If API Key exists -> We are ONLINE/READY, even if DB is empty
                 setLoadingState({ active: true, msg: "SCANNING DATABASE...", time: 0.1 });
                 let fullText = "";
                 let pdfIndex = 1;
@@ -359,9 +346,7 @@
                 let foundAny = false;
 
                 try {
-                    // Optimized scan loop with timeout protection
-                    const maxScan = 20; 
-                    while (failCount < 2 && pdfIndex < maxScan) { 
+                    while (failCount < 2 && pdfIndex < 20) { 
                         const url = `data/${config.subject}/${config.level}/${pdfIndex}.pdf`;
                         try {
                             const head = await fetch(url, { method: 'HEAD' });
@@ -377,15 +362,13 @@
                             failCount = 0; pdfIndex++;
                         } catch (e) { failCount++; pdfIndex++; }
                     }
-                } catch (e) { 
-                    console.error("RAG Error", e); 
-                } finally {
-                    // Always finish loading state
-                    setContextData(fullText.substring(0, 15000));
-                    setContextStatus(foundAny ? "ready" : "offline"); // Use offline if no database found to indicate limited/basic AI mode
-                    setLoadingState({ active: false, msg: "", time: 0 });
-                    startSession();
-                }
+                } catch (e) { console.error("RAG Error", e); }
+
+                setContextData(fullText.substring(0, 15000));
+                // Set to 'ready' if API Key exists, regardless of PDFs
+                setContextStatus("ready");
+                setLoadingState({ active: false, msg: "", time: 0 });
+                startSession();
             };
 
             const generateQuestion = async (indexOverride) => {
