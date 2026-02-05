@@ -30,8 +30,7 @@
                         'slide-up': 'slideUp 0.5s ease-out forwards',
                         'fade-in': 'fadeIn 0.3s ease-out forwards',
                         'slide-in-right': 'slideInRight 0.3s ease-out forwards',
-                        'slide-up-reveal': 'slideUpReveal 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-                        'spin-slow': 'spin 2s linear infinite',
+                        'slide-up-reveal': 'slideUpReveal 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards'
                     },
                     keyframes: {
                         slideUp: {
@@ -136,6 +135,7 @@
         const { createRoot } = ReactDOM;
         
         // --- CONSTANTS ---
+        // Fallback Priority: 2.5 Flash -> 2.5 Flash-Lite -> 2.0 Flash -> 2.0 Flash-Lite
         const GEMINI_MODELS = [
             "gemini-2.5-flash", 
             "gemini-2.5-flash-lite", 
@@ -158,14 +158,16 @@
             if (!str) return null;
             try {
                 const trimmed = str.trim();
+                // If it already looks like a key
                 if (trimmed.startsWith("AIza")) return trimmed;
+                // Attempt Base64 Decode
                 const decoded = atob(trimmed);
                 if (decoded && decoded.includes("AIza")) return decoded.trim();
                 return null;
             } catch { return null; }
         };
 
-        // Helper: Call Gemini with Fallback
+        // Helper: Call Gemini with Model Fallback
         const callGeminiAPI = async (payload, apiKey) => {
             if (!apiKey) throw new Error("Missing API Key");
             
@@ -177,8 +179,12 @@
                         body: JSON.stringify(payload)
                     });
                     
-                    if (response.status === 429) throw new Error("Rate limit");
+                    if (response.status === 429) {
+                        console.warn(`Model ${model} rate limited. Falling back...`);
+                        continue;
+                    }
                     if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
+                    
                     const data = await response.json();
                     return data;
                 } catch (e) {
@@ -186,7 +192,7 @@
                     continue; 
                 }
             }
-            throw new Error("All Gemini models unavailable.");
+            throw new Error("All Gemini models unavailable. Please check your API key or connection.");
         };
 
         const formatTime = (seconds) => {
@@ -200,15 +206,20 @@
             useEffect(() => {
                 if (!containerRef.current || !text) return;
                 containerRef.current.innerHTML = '';
-                const parts = text.split(/\$([^\$]+)\$/g);
-                parts.forEach((part, index) => {
-                    if (index % 2 === 1) { 
+                // Robust splitter that keeps delimiters but separates math
+                const parts = text.split(/(\$[^$]+\$)/g);
+                
+                parts.forEach((part) => {
+                    if (part.startsWith('$') && part.endsWith('$')) { 
+                        // It's Math
                         const span = document.createElement('span');
+                        const mathContent = part.slice(1, -1); // Remove $
                         try {
-                            katex.render(part, span, { throwOnError: false, displayMode: false });
-                        } catch(e) { span.innerText = `$${part}$`; }
+                            katex.render(mathContent, span, { throwOnError: false, displayMode: false });
+                        } catch(e) { span.innerText = part; }
                         containerRef.current.appendChild(span);
                     } else {
+                        // It's Text
                         if (part.length > 0) {
                             const span = document.createElement('span');
                             span.innerText = part;
@@ -287,15 +298,18 @@
                 return () => clearInterval(interval);
             }, [view]);
 
+            // Robust Key Loading
             useEffect(() => {
                 fetch('GE.txt')
                     .then(r => r.ok ? r.text() : Promise.reject())
                     .then(txt => {
-                        const lines = txt.split('\n');
+                        const lines = txt.split(/[\r\n]+/);
+                        let validKey = null;
                         for (const line of lines) {
-                            const validKey = decodeKey(line);
-                            if (validKey) { setUser(u => ({ ...u, apiKey: validKey })); break; }
+                            const k = decodeKey(line);
+                            if (k) { validKey = k; break; }
                         }
+                        if (validKey) setUser(u => ({ ...u, apiKey: validKey }));
                     })
                     .catch(() => console.log("No GE.txt"));
             }, []);
@@ -362,7 +376,6 @@
                 if (generationPaused.current) return;
                 setGenerating(true);
 
-                // Helper to update specific index
                 const updateQ = (idx, qData) => {
                     setQuestions(prev => {
                         const newQs = [...prev];
@@ -371,7 +384,6 @@
                     });
                 };
 
-                // If initializing (first 2 questions)
                 if (questions.length === 0) {
                     const placeholders = Array(config.count).fill({ status: 'generating', text: 'Generating...', topic: 'Loading' });
                     setQuestions(placeholders);
@@ -379,7 +391,6 @@
                     const timer = setInterval(() => setLoadingState(p => ({...p, time: p.time + 0.1})), 100);
                     setLoadingState({ active: true, msg: "INITIALIZING SESSION...", time: 0 });
 
-                    // Generate Q1
                     let q1;
                     if (!user.apiKey) q1 = generateOfflineQuestion(config.subject);
                     else {
@@ -388,7 +399,6 @@
                     }
                     updateQ(0, q1);
 
-                    // Generate Q2 immediately if count > 1
                     if (config.count > 1) {
                         let q2;
                         if (!user.apiKey) q2 = generateOfflineQuestion(config.subject);
@@ -399,7 +409,6 @@
                         updateQ(1, q2);
                     }
 
-                    // Prepare Greeting
                     let msgs = [{ role: 'ai', text: `Hello ${user.name}, good luck with your ${config.subject} session!` }];
                     if (config.extraPrompt) msgs.push({ role: 'ai', text: "I've noted your extra instructions." });
                     if (config.customMaterials) msgs.push({ role: 'ai', text: "I've analyzed your uploaded materials and will reference them." });
@@ -412,8 +421,6 @@
                     return;
                 }
 
-                // Background Generation for Q3 onwards
-                // Find next generating index
                 const nextIdx = questions.findIndex(q => q.status === 'generating');
                 if (nextIdx !== -1) {
                     if (!user.apiKey) {
@@ -453,7 +460,6 @@
                 return JSON.parse(data.candidates[0].content.parts[0].text);
             };
 
-            // Loop to fill queue
             useEffect(() => {
                 if (view === "ARENA" && !generating) {
                     const pending = questions.filter(q => q.status === 'generating').length;
@@ -472,7 +478,7 @@
 
             const startSession = () => {
                 setTimer(0);
-                generateQuestion(); // Triggers the init sequence
+                generateQuestion();
             };
 
             return (
@@ -512,9 +518,8 @@
                                     <span className="text-slate-500 font-mono text-xs font-bold bg-white/5 px-3 py-1 rounded-full">{user.name}</span>
                                 </div>
                                 
-                                {/* 3 Column Layout */}
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-4 overflow-y-auto custom-scrollbar pr-2">
-                                    {/* Col 1: Basic */}
+                                    {/* Col 1 */}
                                     <div className="space-y-6">
                                         <h3 className="text-[10px] text-blue-400 font-bold uppercase tracking-widest border-b border-white/10 pb-2">Core Settings</h3>
                                         <div className="custom-select-wrapper">
@@ -535,7 +540,7 @@
                                         </div>
                                     </div>
 
-                                    {/* Col 2: Topics */}
+                                    {/* Col 2 */}
                                     <div className="flex flex-col h-full">
                                         <h3 className="text-[10px] text-blue-400 font-bold uppercase tracking-widest border-b border-white/10 pb-2 mb-4">Focus</h3>
                                         <div className="bg-black/20 rounded-xl p-1 border border-white/5 flex mb-4">
@@ -563,7 +568,7 @@
                                         )}
                                     </div>
 
-                                    {/* Col 3: Customization */}
+                                    {/* Col 3 */}
                                     <div className="space-y-4">
                                         <h3 className="text-[10px] text-blue-400 font-bold uppercase tracking-widest border-b border-white/10 pb-2">Customization</h3>
                                         <div>
@@ -912,37 +917,62 @@
                                     </div>
                                 ) : (
                                     <div className="flex flex-col gap-2 relative">
-                                        {/* Math Keyboard */}
+                                        {/* Math Keyboard - Slides UP from input */}
                                         <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-full max-w-xl glass-panel p-2 rounded-xl flex flex-wrap gap-2 justify-center transition-all duration-300 origin-bottom ${showKeyboard ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-4 scale-95 pointer-events-none'}`}>
                                             <div className="w-full flex justify-end mb-1">
-                                                <button onClick={() => setShowKeyboard(false)} className="text-[10px] text-slate-400 hover:text-white uppercase font-bold tracking-wide flex items-center gap-1 bg-white/5 px-2 py-1 rounded">▼ Collapse</button>
+                                                <button onClick={() => setShowKeyboard(false)} className="text-[10px] text-slate-400 hover:text-white uppercase font-bold tracking-wide flex items-center gap-1 bg-white/5 px-2 py-1 rounded">
+                                                    ▼ Collapse
+                                                </button>
                                             </div>
                                             {mathSymbols.map((item) => (
-                                                <button key={item.code} onClick={() => insertMath(item.code)} className="px-3 py-2 bg-white/5 hover:bg-white/10 rounded text-xs font-mono text-blue-300 min-w-[2.5rem] transition-colors shadow-sm border border-white/5"><LatexRenderer text={`$${item.display}$`} /></button>
+                                                <button key={item.code} onClick={() => insertMath(item.code)} className="px-3 py-2 bg-white/5 hover:bg-white/10 rounded text-xs font-mono text-blue-300 min-w-[2.5rem] transition-colors shadow-sm border border-white/5">
+                                                    <LatexRenderer text={`$${item.display}$`} />
+                                                </button>
                                             ))}
                                         </div>
 
                                         <div className="flex gap-3 items-stretch">
+                                            {/* Button Cluster Left */}
                                             <div className="flex gap-2">
                                                 <button onClick={() => setShowGiveUpConfirm(true)} className="w-24 bg-red-900/40 text-red-300 hover:bg-red-900/60 font-bold rounded-xl text-[10px] uppercase tracking-wider transition-colors border border-red-500/20">GIVE UP</button>
                                                 <button onClick={submitAnswer} disabled={grading} className="w-24 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-lg shadow-blue-900/40 disabled:opacity-50 transition-all active:scale-95 uppercase tracking-wider text-[10px] border border-white/10">{grading ? "..." : "SUBMIT"}</button>
                                             </div>
+
                                             <div className="flex-1 relative group">
-                                                <input ref={inputRef} type="text" value={input} onChange={(e) => setInput(e.target.value)} onFocus={() => setShowKeyboard(true)} placeholder="Enter final answer..." className="w-full h-full glass-input rounded-xl pl-4 pr-10 py-4 font-mono text-lg shadow-xl" onKeyDown={(e) => e.key === 'Enter' && submitAnswer()}/>
-                                                <button onClick={() => setShowKeyboard(!showKeyboard)} className={`absolute right-3 top-1/2 transform -translate-y-1/2 p-2 rounded-lg transition-colors ${showKeyboard ? 'text-blue-400 bg-white/10' : 'text-slate-400 hover:text-white'}`}>⌨️</button>
+                                                <input 
+                                                    ref={inputRef}
+                                                    type="text" 
+                                                    value={input} 
+                                                    onChange={(e) => setInput(e.target.value)} 
+                                                    onFocus={() => setShowKeyboard(true)}
+                                                    placeholder="Enter final answer..." 
+                                                    className="w-full h-full glass-input rounded-xl pl-4 pr-10 py-4 font-mono text-lg shadow-xl" 
+                                                    onKeyDown={(e) => e.key === 'Enter' && submitAnswer()}
+                                                />
+                                                <button 
+                                                    onClick={() => setShowKeyboard(!showKeyboard)} 
+                                                    className={`absolute right-3 top-1/2 transform -translate-y-1/2 p-2 rounded-lg transition-colors ${showKeyboard ? 'text-blue-400 bg-white/10' : 'text-slate-400 hover:text-white'}`}
+                                                >
+                                                    ⌨️
+                                                </button>
                                             </div>
-                                            <button onClick={() => { setSidebarTab('tutor'); document.getElementById('tutor-drawer').classList.toggle('translate-x-full'); }} className="bg-slate-700 hover:bg-slate-600 text-white w-14 rounded-xl shadow-lg transition-all md:hidden">?</button>
+
+                                            <button onClick={() => { setSidebarTab('tutor'); document.getElementById('tutor-drawer').classList.toggle('translate-x-full'); }} className="bg-slate-700 hover:bg-slate-600 text-white w-14 rounded-xl shadow-lg transition-all md:hidden">
+                                                ?
+                                            </button>
                                         </div>
                                     </div>
                                 )}
                             </div>
                         </div>
 
+                        {/* Modals */}
                         {showClearConfirm && (
                             <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
                                 <div className="glass-panel p-8 rounded-2xl max-w-sm w-full text-center shadow-2xl transform scale-100 transition-all">
                                     <h3 className="text-xl font-bold text-white mb-2">Clear Workspace?</h3>
-                                    <div className="flex gap-3 mt-6">
+                                    <p className="text-slate-400 mb-6 text-sm">This will erase all your current working. This action cannot be undone.</p>
+                                    <div className="flex gap-3">
                                         <button onClick={() => setShowClearConfirm(false)} className="flex-1 py-3 rounded-xl bg-slate-700 text-white font-bold hover:bg-slate-600 transition-colors">CANCEL</button>
                                         <button onClick={() => { const ctx = ctxRef.current; ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height); setShowClearConfirm(false); }} className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-500 transition-colors shadow-lg shadow-red-900/30">CLEAR ALL</button>
                                     </div>
@@ -954,7 +984,8 @@
                             <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
                                 <div className="glass-panel p-8 rounded-2xl max-w-sm w-full text-center shadow-2xl transform scale-100 transition-all">
                                     <h3 className="text-xl font-bold text-white mb-2">Surrender Question?</h3>
-                                    <div className="flex gap-3 mt-6">
+                                    <p className="text-slate-400 mb-6 text-sm">You will receive 0 marks. The AI will reveal the solution steps.</p>
+                                    <div className="flex gap-3">
                                         <button onClick={() => setShowGiveUpConfirm(false)} className="flex-1 py-3 rounded-xl bg-slate-700 text-white font-bold hover:bg-slate-600 transition-colors">CANCEL</button>
                                         <button onClick={handleSurrender} className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-500 transition-colors shadow-lg shadow-red-900/30">SURRENDER</button>
                                     </div>
@@ -996,10 +1027,12 @@
                                             <div className={`text-5xl font-black mb-2 ${question.grading.correct ? 'text-emerald-400' : 'text-red-400'}`}>{question.grading.mark}/{question.marks}</div>
                                             <div className="text-xs uppercase tracking-widest text-slate-500">Marks Awarded</div>
                                         </div>
+                                        
                                         <div className="bg-white/5 rounded-xl p-4 border border-white/5">
                                             <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Correct Answer</h4>
                                             <div className="text-sm font-mono text-white"><LatexRenderer text={question.answer} /></div>
                                         </div>
+
                                         <div className="space-y-3">
                                             <div className="bg-emerald-900/10 p-4 rounded-xl border-l-2 border-emerald-500">
                                                 <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1">Positives</h4>
@@ -1099,6 +1132,14 @@
                     doc.text(splitFeed, 22, y);
                     y += (splitFeed.length * 5) + 10;
                 });
+                
+                const pageCount = doc.internal.getNumberOfPages();
+                for(let i = 1; i <= pageCount; i++) {
+                    doc.setPage(i);
+                    doc.setFontSize(8);
+                    doc.setTextColor(150);
+                    doc.text(`Eric / CCPSPY | Willetton SHS`, 105, 290, null, null, "center");
+                }
                 
                 doc.save(`ATAR_Report_${user.name}.pdf`);
             };
