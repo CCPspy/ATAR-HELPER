@@ -30,7 +30,8 @@
                         'slide-up': 'slideUp 0.5s ease-out forwards',
                         'fade-in': 'fadeIn 0.3s ease-out forwards',
                         'slide-in-right': 'slideInRight 0.3s ease-out forwards',
-                        'slide-up-reveal': 'slideUpReveal 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards'
+                        'slide-up-reveal': 'slideUpReveal 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                        'spin-slow': 'spin 2s linear infinite',
                     },
                     keyframes: {
                         slideUp: {
@@ -115,6 +116,16 @@
         .custom-scrollbar::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #475569; }
+        
+        /* Spin Animation for Loading Questions */
+        .spin-border {
+            border: 2px solid transparent;
+            border-top-color: #3b82f6;
+            border-right-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -125,7 +136,6 @@
         const { createRoot } = ReactDOM;
         
         // --- CONSTANTS ---
-        // Fallback models in priority order
         const GEMINI_MODELS = [
             "gemini-2.5-flash", 
             "gemini-2.5-flash-lite", 
@@ -148,9 +158,7 @@
             if (!str) return null;
             try {
                 const trimmed = str.trim();
-                // Check if plain text
                 if (trimmed.startsWith("AIza")) return trimmed;
-                // Try decoding
                 const decoded = atob(trimmed);
                 if (decoded && decoded.includes("AIza")) return decoded.trim();
                 return null;
@@ -159,6 +167,8 @@
 
         // Helper: Call Gemini with Fallback
         const callGeminiAPI = async (payload, apiKey) => {
+            if (!apiKey) throw new Error("Missing API Key");
+            
             for (const model of GEMINI_MODELS) {
                 try {
                     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
@@ -168,49 +178,37 @@
                     });
                     
                     if (response.status === 429) throw new Error("Rate limit");
-                    if (!response.ok) throw new Error(response.statusText);
+                    if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
                     const data = await response.json();
                     return data;
                 } catch (e) {
-                    console.warn(`Model ${model} failed. Trying next...`);
+                    console.warn(`Model ${model} failed: ${e.message}. Trying next...`);
                     continue; 
                 }
             }
             throw new Error("All Gemini models unavailable.");
         };
 
-        // Helper: Time Formatter
         const formatTime = (seconds) => {
             const mins = Math.floor(seconds / 60);
             const secs = seconds % 60;
             return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
         };
 
-        // Enhanced Math Renderer (Splits Text & Math properly)
         const LatexRenderer = ({ text }) => {
             const containerRef = useRef(null);
-
             useEffect(() => {
                 if (!containerRef.current || !text) return;
-                
-                // Clear container
                 containerRef.current.innerHTML = '';
-
-                // Split by regex to find $...$ segments
                 const parts = text.split(/\$([^\$]+)\$/g);
-
                 parts.forEach((part, index) => {
                     if (index % 2 === 1) { 
-                        // It's Math (inside dollars)
                         const span = document.createElement('span');
                         try {
                             katex.render(part, span, { throwOnError: false, displayMode: false });
-                        } catch(e) {
-                            span.innerText = `$${part}$`;
-                        }
+                        } catch(e) { span.innerText = `$${part}$`; }
                         containerRef.current.appendChild(span);
                     } else {
-                        // It's Text
                         if (part.length > 0) {
                             const span = document.createElement('span');
                             span.innerText = part;
@@ -219,7 +217,6 @@
                     }
                 });
             }, [text]);
-
             return <span ref={containerRef} className="latex-content" />;
         };
 
@@ -231,12 +228,7 @@
                         const a = Math.floor(Math.random() * 5) + 2;
                         const n = Math.floor(Math.random() * 3) + 2;
                         const marks = Math.floor(Math.random() * 3) + 2;
-                        return {
-                            text: `Differentiate the function $f(x) = ${a}x^${n} - ${Math.floor(Math.random()*10)}x$ with respect to $x$.`,
-                            answer: `$f'(x) = ${a*n}x^${n-1} - ${Math.floor(Math.random()*10)}$`,
-                            marks: marks,
-                            hint: "Apply the power rule: $\\frac{d}{dx}(ax^n) = anx^{n-1}$."
-                        };
+                        return { text: `Differentiate $f(x) = ${a}x^${n} - ${Math.floor(Math.random()*10)}x$`, answer: `$f'(x) = ${a*n}x^${n-1} - ...$`, marks: marks, hint: "Power Rule" };
                     }
                 },
                 {
@@ -245,12 +237,7 @@
                         const a = Math.floor(Math.random() * 5) + 2;
                         const c = Math.floor(Math.random() * 20) + 10;
                         const marks = Math.floor(Math.random() * 2) + 2;
-                        return {
-                            text: `Solve for $x$: $${a}x + 5 = ${c}$`,
-                            answer: `$x = ${(c-5)/a}$`,
-                            marks: marks,
-                            hint: "Isolate $x$ by subtracting 5 then dividing."
-                        }
+                        return { text: `Solve for $x$: $${a}x + 5 = ${c}$`, answer: `$x = ${(c-5)/a}$`, marks: marks, hint: "Isolate x" }
                     }
                 }
             ];
@@ -268,7 +255,9 @@
                 level: "Year 12", 
                 studyMode: "full",
                 selectedTopics: [],
-                count: 5 
+                count: 5,
+                extraPrompt: "",
+                customMaterials: ""
             });
             
             const [contextData, setContextData] = useState("");
@@ -280,31 +269,24 @@
             const [generating, setGenerating] = useState(false);
             const generationPaused = useRef(false);
             const [timer, setTimer] = useState(0); 
+            const [initialMessages, setInitialMessages] = useState([]);
 
             useEffect(() => {
                 const handleBeforeUnload = (e) => {
-                    if (view === "ARENA") {
-                        e.preventDefault();
-                        e.returnValue = '';
-                        return '';
-                    }
+                    if (view === "ARENA") { e.preventDefault(); e.returnValue = ''; return ''; }
                 };
                 window.addEventListener('beforeunload', handleBeforeUnload);
                 return () => window.removeEventListener('beforeunload', handleBeforeUnload);
             }, [view]);
 
-            // Timer Logic
             useEffect(() => {
                 let interval;
                 if (view === "ARENA") {
-                    interval = setInterval(() => {
-                        setTimer(prev => prev + 1);
-                    }, 1000);
+                    interval = setInterval(() => { setTimer(prev => prev + 1); }, 1000);
                 }
                 return () => clearInterval(interval);
             }, [view]);
 
-            // Robust Key Loading
             useEffect(() => {
                 fetch('GE.txt')
                     .then(r => r.ok ? r.text() : Promise.reject())
@@ -312,14 +294,31 @@
                         const lines = txt.split('\n');
                         for (const line of lines) {
                             const validKey = decodeKey(line);
-                            if (validKey) {
-                                setUser(u => ({ ...u, apiKey: validKey }));
-                                break; 
-                            }
+                            if (validKey) { setUser(u => ({ ...u, apiKey: validKey })); break; }
                         }
                     })
-                    .catch(() => console.log("No GE.txt or invalid content"));
+                    .catch(() => console.log("No GE.txt"));
             }, []);
+
+            const handleFileUpload = async (e) => {
+                const files = Array.from(e.target.files);
+                if (files.length === 0) return;
+                setLoadingState({ active: true, msg: "Reading Materials...", time: 0.1 });
+                let extractedText = "";
+                for (const file of files) {
+                    try {
+                        const buffer = await file.arrayBuffer();
+                        const pdf = await pdfjsLib.getDocument(buffer).promise;
+                        for (let i = 1; i <= Math.min(pdf.numPages, 5); i++) {
+                            const page = await pdf.getPage(i);
+                            const content = await page.getTextContent();
+                            extractedText += content.items.map(item => item.str).join(' ') + "\n";
+                        }
+                    } catch (err) { console.error("PDF Error", err); }
+                }
+                setConfig(prev => ({ ...prev, customMaterials: extractedText }));
+                setLoadingState({ active: false, msg: "", time: 0 });
+            };
 
             const loadSubjectContext = async () => {
                 if (!user.apiKey) {
@@ -340,22 +339,16 @@
                         try {
                             const head = await fetch(url, { method: 'HEAD' });
                             if (!head.ok) throw new Error("404");
-                            
                             const loadingTask = pdfjsLib.getDocument(url);
                             const pdf = await loadingTask.promise;
-                            const pagesToRead = Math.min(pdf.numPages, 4);
-                            for (let i = 1; i <= pagesToRead; i++) {
+                            for (let i = 1; i <= Math.min(pdf.numPages, 4); i++) {
                                 const page = await pdf.getPage(i);
                                 const content = await page.getTextContent();
                                 fullText += content.items.map(item => item.str).join(' ');
                             }
                             foundAny = true;
-                            failCount = 0; 
-                            pdfIndex++;
-                        } catch (e) {
-                            failCount++;
-                            pdfIndex++;
-                        }
+                            failCount = 0; pdfIndex++;
+                        } catch (e) { failCount++; pdfIndex++; }
                     }
                 } catch (e) { console.error("RAG Error", e); }
 
@@ -365,56 +358,72 @@
                 startSession();
             };
 
-            const generateQuestion = async () => {
+            const generateQuestion = async (indexOverride) => {
                 if (generationPaused.current) return;
                 setGenerating(true);
 
-                const isFirst = questions.length === 0;
-                
-                const addQuestion = (q) => {
-                    setQuestions(prev => [...prev, { ...q, id: Date.now(), status: 'ready', userAnswer: '', grading: null }]);
+                // Helper to update specific index
+                const updateQ = (idx, qData) => {
+                    setQuestions(prev => {
+                        const newQs = [...prev];
+                        newQs[idx] = { ...qData, id: Date.now(), status: 'ready', userAnswer: '', grading: null };
+                        return newQs;
+                    });
                 };
 
-                const stopLoading = (timer) => {
-                    if(timer) clearInterval(timer);
-                    setLoadingState({ active: false, msg: "", time: 0 });
-                };
-
-                if (isFirst) {
-                    const timer = setInterval(() => setLoadingState(p => ({...p, time: p.time + 0.1})), 100);
-                    setLoadingState({ active: true, msg: "CONSULTING NEURAL NETWORK...", time: 0 });
+                // If initializing (first 2 questions)
+                if (questions.length === 0) {
+                    const placeholders = Array(config.count).fill({ status: 'generating', text: 'Generating...', topic: 'Loading' });
+                    setQuestions(placeholders);
                     
-                    if (!user.apiKey) {
-                        const q = generateOfflineQuestion(config.subject);
-                        addQuestion(q);
-                        stopLoading(timer);
-                        setView("ARENA");
-                        setGenerating(false);
-                        return;
+                    const timer = setInterval(() => setLoadingState(p => ({...p, time: p.time + 0.1})), 100);
+                    setLoadingState({ active: true, msg: "INITIALIZING SESSION...", time: 0 });
+
+                    // Generate Q1
+                    let q1;
+                    if (!user.apiKey) q1 = generateOfflineQuestion(config.subject);
+                    else {
+                        try { q1 = await fetchQuestionAI(); } 
+                        catch (e) { q1 = generateOfflineQuestion(config.subject); }
+                    }
+                    updateQ(0, q1);
+
+                    // Generate Q2 immediately if count > 1
+                    if (config.count > 1) {
+                        let q2;
+                        if (!user.apiKey) q2 = generateOfflineQuestion(config.subject);
+                        else {
+                            try { q2 = await fetchQuestionAI(); }
+                            catch (e) { q2 = generateOfflineQuestion(config.subject); }
+                        }
+                        updateQ(1, q2);
                     }
 
-                    try {
-                        const q = await fetchQuestionAI();
-                        addQuestion(q);
-                        stopLoading(timer);
-                        setView("ARENA");
-                    } catch (e) {
-                         const q = generateOfflineQuestion(config.subject);
-                         addQuestion(q);
-                         stopLoading(timer);
-                         setView("ARENA");
-                    }
-                } else {
+                    // Prepare Greeting
+                    let msgs = [{ role: 'ai', text: `Hello ${user.name}, good luck with your ${config.subject} session!` }];
+                    if (config.extraPrompt) msgs.push({ role: 'ai', text: "I've noted your extra instructions." });
+                    if (config.customMaterials) msgs.push({ role: 'ai', text: "I've analyzed your uploaded materials and will reference them." });
+                    setInitialMessages(msgs);
+
+                    clearInterval(timer);
+                    setLoadingState({ active: false, msg: "", time: 0 });
+                    setView("ARENA");
+                    setGenerating(false);
+                    return;
+                }
+
+                // Background Generation for Q3 onwards
+                // Find next generating index
+                const nextIdx = questions.findIndex(q => q.status === 'generating');
+                if (nextIdx !== -1) {
                     if (!user.apiKey) {
-                         const q = generateOfflineQuestion(config.subject);
-                         addQuestion(q);
+                        updateQ(nextIdx, generateOfflineQuestion(config.subject));
                     } else {
                         try {
                             const q = await fetchQuestionAI();
-                            addQuestion(q);
+                            updateQ(nextIdx, q);
                         } catch (e) {
-                            const q = generateOfflineQuestion(config.subject);
-                            addQuestion(q);
+                            updateQ(nextIdx, generateOfflineQuestion(config.subject));
                         }
                     }
                 }
@@ -426,16 +435,31 @@
                 const focus = config.studyMode === 'targeted' && config.selectedTopics.length > 0 
                     ? `FOCUS TOPICS: ${config.selectedTopics.join(", ")}` 
                     : `FOCUS: Comprehensive ${config.level} Curriculum`;
-                const systemPrompt = `You are a strict teacher for Australian ATAR ${config.subject}. CONTEXT: ${contextData}. TASK: Generate 1 unique, challenging question. ${focus}. RULES: Output strictly valid JSON. NO multiple choice. NO sub-questions. ALWAYS wrap math expressions in single $ signs (e.g. $x^2$). Allocate marks (between 2 and 6) based on difficulty. FORMAT: { "text": "Question text with math in $...$", "topic": "string", "answer": "Answer with math in $...$", "hint": "Hint string", "marks": number }`;
+                
+                let materialContext = "";
+                if (config.customMaterials) materialContext = `USER MATERIALS: ${config.customMaterials.substring(0, 5000)}`;
+                let extra = "";
+                if (config.extraPrompt) extra = `USER EXTRA INSTRUCTIONS: ${config.extraPrompt}`;
+
+                const systemPrompt = `You are a strict teacher for Australian ATAR ${config.subject}. 
+                CONTEXT: ${contextData}
+                ${materialContext}
+                TASK: Generate 1 unique, challenging question. ${focus}. ${extra}
+                RULES: Output strictly valid JSON. NO multiple choice. NO sub-questions. ALWAYS wrap math expressions in single $ signs (e.g. $x^2$). Allocate marks (between 2 and 6) based on difficulty. 
+                FORMAT: { "text": "Question text with math in $...$", "topic": "string", "answer": "Answer with math in $...$", "hint": "Hint string", "marks": number }`;
                 
                 const payload = { contents: [{ parts: [{ text: systemPrompt }] }], generationConfig: { responseMimeType: "application/json" } };
                 const data = await callGeminiAPI(payload, user.apiKey);
                 return JSON.parse(data.candidates[0].content.parts[0].text);
             };
 
+            // Loop to fill queue
             useEffect(() => {
-                if (view === "ARENA" && questions.length < config.count && !generating) {
-                    generateQuestion();
+                if (view === "ARENA" && !generating) {
+                    const pending = questions.filter(q => q.status === 'generating').length;
+                    if (pending > 0) {
+                        generateQuestion();
+                    }
                 }
             }, [questions, view, generating]);
 
@@ -448,7 +472,7 @@
 
             const startSession = () => {
                 setTimer(0);
-                generateQuestion();
+                generateQuestion(); // Triggers the init sequence
             };
 
             return (
@@ -473,14 +497,7 @@
                                 <h1 className="text-5xl font-black tracking-tighter mb-2 bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">ATAR HELPER</h1>
                                 <div className="h-1 w-24 bg-blue-500 rounded-full mb-10 opacity-80"></div>
                                 <div className="w-full relative group">
-                                    <input 
-                                        type="text" 
-                                        placeholder="ENTER SURNAME" 
-                                        className="w-full glass-input p-5 rounded-xl text-center font-bold tracking-[0.2em] text-lg placeholder:text-slate-600 focus:placeholder:text-slate-700"
-                                        value={user.name}
-                                        onChange={(e) => setUser({...user, name: e.target.value.toUpperCase()})}
-                                        onKeyDown={(e) => e.key === 'Enter' && handleNameSubmit()}
-                                    />
+                                    <input type="text" placeholder="ENTER SURNAME" className="w-full glass-input p-5 rounded-xl text-center font-bold tracking-[0.2em] text-lg placeholder:text-slate-600 focus:placeholder:text-slate-700" value={user.name} onChange={(e) => setUser({...user, name: e.target.value.toUpperCase()})} onKeyDown={(e) => e.key === 'Enter' && handleNameSubmit()}/>
                                 </div>
                                 <button onClick={handleNameSubmit} className="w-full mt-6 bg-blue-600 hover:bg-blue-500 text-white font-bold py-5 rounded-xl shadow-lg shadow-blue-900/20 transition-all hover:translate-y-[-2px] active:scale-95 tracking-widest text-xs">INITIALIZE SYSTEM</button>
                             </div>
@@ -489,41 +506,38 @@
 
                     {view === "CONFIG" && (
                         <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-6 overflow-hidden">
-                            <div className="w-full max-w-3xl glass-panel p-8 md:p-10 rounded-3xl animate-slide-up flex flex-col max-h-full">
+                            <div className="w-full max-w-4xl glass-panel p-8 md:p-10 rounded-3xl animate-slide-up flex flex-col max-h-full">
                                 <div className="flex justify-between items-center mb-8 border-b border-white/5 pb-6">
                                     <h2 className="text-sm font-bold text-white flex items-center tracking-[0.2em]"><div className="w-1.5 h-6 bg-emerald-500 mr-4 rounded-full"></div>SESSION CONFIGURATION</h2>
                                     <span className="text-slate-500 font-mono text-xs font-bold bg-white/5 px-3 py-1 rounded-full">{user.name}</span>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-4 overflow-y-auto custom-scrollbar pr-2">
+                                
+                                {/* 3 Column Layout */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-4 overflow-y-auto custom-scrollbar pr-2">
+                                    {/* Col 1: Basic */}
                                     <div className="space-y-6">
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="custom-select-wrapper">
-                                                <label className="text-[10px] text-slate-400 font-bold uppercase tracking-widest ml-1 mb-2 block">Subject</label>
-                                                <select className="w-full glass-input p-3 rounded-lg font-medium cursor-pointer text-sm" value={config.subject} onChange={(e) => setConfig({...config, subject: e.target.value, selectedTopics: []})}>
-                                                    {Object.keys(SUBJECT_DATA).map(s => <option key={s} value={s}>{s.toUpperCase()}</option>)}
-                                                </select>
-                                            </div>
-                                            <div className="custom-select-wrapper">
-                                                <label className="text-[10px] text-slate-400 font-bold uppercase tracking-widest ml-1 mb-2 block">Level</label>
-                                                <select className="w-full glass-input p-3 rounded-lg font-medium cursor-pointer text-sm" value={config.level} onChange={(e) => setConfig({...config, level: e.target.value})}>
-                                                    {LEVELS.map(l => <option key={l} value={l}>{l.toUpperCase()}</option>)}
-                                                </select>
-                                            </div>
+                                        <h3 className="text-[10px] text-blue-400 font-bold uppercase tracking-widest border-b border-white/10 pb-2">Core Settings</h3>
+                                        <div className="custom-select-wrapper">
+                                            <label className="text-[10px] text-slate-400 font-bold uppercase tracking-widest ml-1 mb-2 block">Subject</label>
+                                            <select className="w-full glass-input p-3 rounded-lg font-medium cursor-pointer text-sm" value={config.subject} onChange={(e) => setConfig({...config, subject: e.target.value, selectedTopics: []})}>
+                                                {Object.keys(SUBJECT_DATA).map(s => <option key={s} value={s}>{s.toUpperCase()}</option>)}
+                                            </select>
                                         </div>
-                                        <div className="bg-white/5 p-4 rounded-xl border border-white/5">
-                                            <div className="flex justify-between mb-2">
-                                                <label className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Questions</label>
-                                                <span className="text-xs font-bold text-blue-400">{config.count}</span>
-                                            </div>
+                                        <div className="custom-select-wrapper">
+                                            <label className="text-[10px] text-slate-400 font-bold uppercase tracking-widest ml-1 mb-2 block">Level</label>
+                                            <select className="w-full glass-input p-3 rounded-lg font-medium cursor-pointer text-sm" value={config.level} onChange={(e) => setConfig({...config, level: e.target.value})}>
+                                                {LEVELS.map(l => <option key={l} value={l}>{l.toUpperCase()}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-slate-400 font-bold uppercase tracking-widest ml-1 mb-2 block">Questions: {config.count}</label>
                                             <input type="range" min="1" max="10" value={config.count} onChange={(e) => setConfig({...config, count: parseInt(e.target.value)})} className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"/>
                                         </div>
-                                        <div className="pt-2">
-                                            <label className="text-[10px] text-slate-500 font-bold uppercase tracking-widest ml-1 mb-2 block">API Override (Optional)</label>
-                                            <input type="password" value={user.apiKey} onChange={(e) => setUser({...user, apiKey: e.target.value})} placeholder="••••••••••••••••" className="w-full bg-transparent border-b border-slate-700 py-2 text-xs font-mono text-slate-300 focus:border-blue-500 focus:outline-none transition-colors"/>
-                                        </div>
                                     </div>
+
+                                    {/* Col 2: Topics */}
                                     <div className="flex flex-col h-full">
-                                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-widest ml-1 mb-2 block">Study Mode</label>
+                                        <h3 className="text-[10px] text-blue-400 font-bold uppercase tracking-widest border-b border-white/10 pb-2 mb-4">Focus</h3>
                                         <div className="bg-black/20 rounded-xl p-1 border border-white/5 flex mb-4">
                                             <button onClick={() => setConfig({...config, studyMode: 'full'})} className={`flex-1 py-3 text-[10px] font-bold uppercase tracking-wide rounded-lg transition-all ${config.studyMode === 'full' ? 'bg-slate-700 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>Comprehensive</button>
                                             <button onClick={() => setConfig({...config, studyMode: 'targeted'})} className={`flex-1 py-3 text-[10px] font-bold uppercase tracking-wide rounded-lg transition-all ${config.studyMode === 'targeted' ? 'bg-slate-700 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>Targeted</button>
@@ -547,6 +561,33 @@
                                                 <p className="text-xs text-center">Full curriculum will be covered.</p>
                                             </div>
                                         )}
+                                    </div>
+
+                                    {/* Col 3: Customization */}
+                                    <div className="space-y-4">
+                                        <h3 className="text-[10px] text-blue-400 font-bold uppercase tracking-widest border-b border-white/10 pb-2">Customization</h3>
+                                        <div>
+                                            <label className="text-[10px] text-slate-400 font-bold uppercase tracking-widest ml-1 mb-2 block">Extra Instructions</label>
+                                            <textarea 
+                                                value={config.extraPrompt}
+                                                onChange={(e) => setConfig({...config, extraPrompt: e.target.value})}
+                                                placeholder="E.g., 'Be extra strict', 'Focus on tricky algebra'..."
+                                                className="w-full glass-input rounded-xl p-3 text-xs h-24 resize-none focus:outline-none"
+                                            ></textarea>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-slate-400 font-bold uppercase tracking-widest ml-1 mb-2 block">Upload Materials (PDF)</label>
+                                            <div className="relative w-full h-24 border border-dashed border-white/20 rounded-xl flex flex-col items-center justify-center hover:bg-white/5 transition-colors group">
+                                                <input type="file" accept=".pdf" multiple onChange={handleFileUpload} className="absolute inset-0 opacity-0 cursor-pointer"/>
+                                                <span className="text-2xl mb-1 group-hover:scale-110 transition-transform">📄</span>
+                                                <span className="text-[10px] text-slate-500">Drop PDFs here</span>
+                                            </div>
+                                            {config.customMaterials && <p className="text-[10px] text-emerald-400 mt-1">✓ Materials Loaded</p>}
+                                        </div>
+                                        <div className="pt-2">
+                                            <label className="text-[10px] text-slate-500 font-bold uppercase tracking-widest ml-1 mb-2 block">API Override</label>
+                                            <input type="password" value={user.apiKey} onChange={(e) => setUser({...user, apiKey: e.target.value})} placeholder="••••••••••••••••" className="w-full bg-transparent border-b border-slate-700 py-2 text-xs font-mono text-slate-300 focus:border-blue-500 focus:outline-none transition-colors"/>
+                                        </div>
                                     </div>
                                 </div>
                                 <button onClick={loadSubjectContext} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl shadow-lg transition-transform active:scale-[0.98] flex items-center justify-center space-x-2 tracking-[0.1em] text-sm mt-2"><span>START SESSION</span></button>
@@ -573,6 +614,7 @@
                             pauseGen={generationPaused}
                             contextStatus={contextStatus}
                             timer={timer}
+                            initialMessages={initialMessages}
                         />
                     )}
 
@@ -593,11 +635,11 @@
             );
         };
 
-        const Arena = ({ questions, question, qIndex, total, onNext, onUpdateQuestion, onFinish, allComplete, apiKey, subject, pauseGen, contextStatus, timer }) => {
+        const Arena = ({ questions, question, qIndex, total, onNext, onUpdateQuestion, onFinish, allComplete, apiKey, subject, pauseGen, contextStatus, timer, initialMessages }) => {
             const [input, setInput] = useState("");
             const [penColor, setPenColor] = useState("#ffffff");
             const [isEraser, setIsEraser] = useState(false);
-            const [messages, setMessages] = useState([]);
+            const [messages, setMessages] = useState(initialMessages || []);
             const [chatInput, setChatInput] = useState("");
             const [grading, setGrading] = useState(false);
             const [evaluating, setEvaluating] = useState(false);
@@ -681,9 +723,7 @@
                     GRADING CRITERIA: 
                     1. STRICT but FAIR. 
                     2. Analyze the image of the working out deeply. Assess if the amount of working shown is sufficient for the marks.
-                    3. Award FOLLOW-THROUGH marks: If the method/process is correct but a minor calculation error occurred, award partial marks (e.g., 1 or 2 marks deducted). 
-                    4. If the final answer is wrong but working is perfect (typo), award high partial marks.
-                    5. If the final answer is correct but no working is shown where working is required, deduct marks.
+                    3. Award FOLLOW-THROUGH marks.
                     RULES: Wrap all math in $ delimiters. 
                     FORMAT: { "mark": number, "correct": boolean, "feedback": { "positives": "string", "negatives": "string" } }`;
                     try {
@@ -733,18 +773,25 @@
             };
 
             const askTutor = async () => {
-                if(!chatInput || !apiKey) return;
+                if(!chatInput) return;
                 const userMsg = chatInput;
                 setMessages(prev => [...prev, {role: 'user', text: userMsg}]);
                 setChatInput("");
                 pauseGen.current = true;
+                
+                if (!apiKey) {
+                    setMessages(prev => [...prev, {role: 'ai', text: "Chat unavailable in Limited Mode."}]);
+                    pauseGen.current = false;
+                    return;
+                }
+
                 try {
                     const prompt = `Student asks: "${userMsg}". Question: "${question.text}". Give a helpful hint using LaTeX formatting for math (enclosed in $ single dollars). DO NOT reveal answer. Brief.`;
                     const payload = { contents: [{ parts: [{ text: prompt }] }] };
                     const data = await callGeminiAPI(payload, apiKey);
                     setMessages(prev => [...prev, {role: 'ai', text: data.candidates[0].content.parts[0].text}]);
                 } catch(e) {
-                    setMessages(prev => [...prev, {role: 'ai', text: "Offline."}]);
+                    setMessages(prev => [...prev, {role: 'ai', text: `Error: ${e.message}`}]);
                 }
                 pauseGen.current = false;
             };
@@ -777,11 +824,37 @@
             return (
                 <div className="flex-1 flex overflow-hidden relative">
                     <div className="w-16 md:w-20 bg-slate-900 border-r border-white/10 flex flex-col items-center py-6 space-y-4 z-20 shadow-xl">
-                        <div className={`w-3 h-3 rounded-full transition-all shadow-[0_0_15px] ${contextStatus === 'ready' ? 'bg-emerald-500 shadow-emerald-500' : contextStatus === 'offline' ? 'bg-amber-500 shadow-amber-500' : 'bg-slate-600 shadow-slate-600'}`} title={contextStatus === 'ready' ? "Cloud Connected" : contextStatus === 'offline' ? "Offline/Limited Mode" : "Idle"}></div>
-                        {contextStatus === 'offline' && <span className="text-[9px] font-bold text-amber-500 text-center leading-tight mb-2 tracking-wide">LIMITED<br/>MODE</span>}
-                        {Array.from({length: total}).map((_, i) => (
-                            <button key={i} className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs transition-all hover:scale-105 active:scale-95 ${i === qIndex ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/40 scale-110' : 'bg-slate-800 text-slate-500 hover:bg-slate-700'} ${questions[i]?.status === 'graded' ? (questions[i].grading?.correct ? 'border-2 border-emerald-500' : 'border-2 border-red-500') : ''}`}>
-                                {i + 1}
+                        <div 
+                            className={`w-3 h-3 rounded-full transition-all shadow-[0_0_15px] 
+                                ${contextStatus === 'ready' ? 'bg-emerald-500 shadow-emerald-500' : 
+                                  contextStatus === 'offline' ? 'bg-amber-500 shadow-amber-500' : 
+                                  'bg-slate-600 shadow-slate-600'}`}
+                        ></div>
+                        <span className={`text-[9px] font-bold text-center leading-tight mb-2 tracking-wide 
+                            ${contextStatus === 'ready' ? 'text-emerald-500' : 
+                              contextStatus === 'offline' ? 'text-amber-500' : 'text-slate-500'}`}>
+                            {contextStatus === 'ready' ? "CLOUD\nACTIVE" : contextStatus === 'offline' ? "LIMITED\nMODE" : "SCANNING"}
+                        </span>
+
+                        {questions.map((q, i) => (
+                            <button 
+                                key={i}
+                                disabled={q.status === 'generating'} 
+                                onClick={() => {
+                                    if(q.status !== 'generating') onNext && i < total ? onUpdateQuestion(questions[i]) : null; // Logic handled in App mainly
+                                    // Just visual here, click handler logic relies on App state
+                                }}
+                                className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs transition-all
+                                    ${i === qIndex ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/40 scale-110' : 'bg-slate-800 text-slate-500 hover:bg-slate-700'}
+                                    ${q.status === 'generating' ? 'border-2 border-blue-500/30' : ''}
+                                    ${q.status === 'graded' ? (q.grading?.correct ? 'border-2 border-emerald-500' : 'border-2 border-red-500') : ''}
+                                `}
+                            >
+                                {q.status === 'generating' ? (
+                                    <div className="w-4 h-4 spin-border"></div>
+                                ) : (
+                                    i + 1
+                                )}
                             </button>
                         ))}
                     </div>
@@ -789,18 +862,15 @@
                     <div className="flex-1 relative bg-[#0f172a] overflow-hidden cursor-crosshair">
                         <canvas ref={canvasRef} className="absolute inset-0 z-0" onMouseDown={startDraw} onMouseMove={draw} onMouseUp={stopDraw} onMouseLeave={stopDraw} onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={stopDraw}/>
 
-                        {/* Top Center Toolbar */}
-                        <div className="absolute top-6 left-1/2 transform -translate-x-1/2 glass-panel px-6 py-3 rounded-full flex space-x-6 z-10 shadow-2xl">
+                        {/* Top Center Toolbar with Timer */}
+                        <div className="absolute top-6 left-1/2 transform -translate-x-1/2 glass-panel px-6 py-3 rounded-full flex space-x-6 z-10 shadow-2xl items-center">
                             <button onClick={() => { setPenColor("#ffffff"); setIsEraser(false); }} className={`w-6 h-6 rounded-full bg-white border-2 transition-transform hover:scale-110 ${!isEraser && penColor === '#ffffff' ? 'ring-2 ring-blue-500' : 'border-transparent'}`} />
                             <button onClick={() => { setPenColor("#3b82f6"); setIsEraser(false); }} className={`w-6 h-6 rounded-full bg-blue-500 border-2 transition-transform hover:scale-110 ${!isEraser && penColor === '#3b82f6' ? 'ring-2 ring-white' : 'border-transparent'}`} />
                             <button onClick={() => setIsEraser(true)} className={`text-slate-400 hover:text-white transition-colors hover:scale-110 ${isEraser ? 'text-blue-400' : ''}`}><svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
                             <div className="w-px h-6 bg-white/20"></div>
                             <button onClick={() => setShowClearConfirm(true)} className="text-red-400 hover:text-red-300 text-[10px] font-bold uppercase tracking-wider hover:scale-105 transition-transform">CLEAR</button>
-                        </div>
-
-                        {/* Timer Display */}
-                        <div className="absolute top-6 right-6 glass-panel px-4 py-2 rounded-xl text-white font-mono text-sm z-10 shadow-lg border border-white/10">
-                            ⏱ {formatTime(timer)}
+                            <div className="w-px h-6 bg-white/20"></div>
+                            <span className="text-white font-mono text-sm">⏱ {formatTime(timer)}</span>
                         </div>
 
                         {/* Question Box */}
@@ -828,7 +898,13 @@
                                         </div>
                                         <div className="flex gap-3">
                                             {qIndex < total - 1 ? (
-                                                <button onClick={onNext} className="flex-1 bg-blue-600 py-3 rounded-lg font-bold hover:bg-blue-500 shadow-lg shadow-blue-900/50 text-white transition-transform active:scale-95">NEXT QUESTION</button>
+                                                <button 
+                                                    onClick={onNext} 
+                                                    disabled={questions[qIndex+1]?.status === 'generating'}
+                                                    className={`flex-1 py-3 rounded-lg font-bold shadow-lg text-white transition-transform active:scale-95 ${questions[qIndex+1]?.status === 'generating' ? 'bg-slate-600 cursor-not-allowed opacity-50' : 'bg-blue-600 hover:bg-blue-500 shadow-blue-900/50'}`}
+                                                >
+                                                    {questions[qIndex+1]?.status === 'generating' ? 'GENERATING NEXT...' : 'NEXT QUESTION'}
+                                                </button>
                                             ) : (
                                                 allComplete && <button onClick={onFinish} className="flex-1 bg-emerald-600 py-3 rounded-lg font-bold hover:bg-emerald-500 shadow-lg text-white transition-transform active:scale-95">FINISH TEST</button>
                                             )}
@@ -836,62 +912,37 @@
                                     </div>
                                 ) : (
                                     <div className="flex flex-col gap-2 relative">
-                                        {/* Math Keyboard - Slides UP from input */}
+                                        {/* Math Keyboard */}
                                         <div className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-full max-w-xl glass-panel p-2 rounded-xl flex flex-wrap gap-2 justify-center transition-all duration-300 origin-bottom ${showKeyboard ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-4 scale-95 pointer-events-none'}`}>
                                             <div className="w-full flex justify-end mb-1">
-                                                <button onClick={() => setShowKeyboard(false)} className="text-[10px] text-slate-400 hover:text-white uppercase font-bold tracking-wide flex items-center gap-1 bg-white/5 px-2 py-1 rounded">
-                                                    ▼ Collapse
-                                                </button>
+                                                <button onClick={() => setShowKeyboard(false)} className="text-[10px] text-slate-400 hover:text-white uppercase font-bold tracking-wide flex items-center gap-1 bg-white/5 px-2 py-1 rounded">▼ Collapse</button>
                                             </div>
                                             {mathSymbols.map((item) => (
-                                                <button key={item.code} onClick={() => insertMath(item.code)} className="px-3 py-2 bg-white/5 hover:bg-white/10 rounded text-xs font-mono text-blue-300 min-w-[2.5rem] transition-colors shadow-sm border border-white/5">
-                                                    <LatexRenderer text={`$${item.display}$`} />
-                                                </button>
+                                                <button key={item.code} onClick={() => insertMath(item.code)} className="px-3 py-2 bg-white/5 hover:bg-white/10 rounded text-xs font-mono text-blue-300 min-w-[2.5rem] transition-colors shadow-sm border border-white/5"><LatexRenderer text={`$${item.display}$`} /></button>
                                             ))}
                                         </div>
 
                                         <div className="flex gap-3 items-stretch">
-                                            {/* Button Cluster Left */}
                                             <div className="flex gap-2">
                                                 <button onClick={() => setShowGiveUpConfirm(true)} className="w-24 bg-red-900/40 text-red-300 hover:bg-red-900/60 font-bold rounded-xl text-[10px] uppercase tracking-wider transition-colors border border-red-500/20">GIVE UP</button>
                                                 <button onClick={submitAnswer} disabled={grading} className="w-24 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-lg shadow-blue-900/40 disabled:opacity-50 transition-all active:scale-95 uppercase tracking-wider text-[10px] border border-white/10">{grading ? "..." : "SUBMIT"}</button>
                                             </div>
-
                                             <div className="flex-1 relative group">
-                                                <input 
-                                                    ref={inputRef}
-                                                    type="text" 
-                                                    value={input} 
-                                                    onChange={(e) => setInput(e.target.value)} 
-                                                    onFocus={() => setShowKeyboard(true)}
-                                                    placeholder="Enter final answer..." 
-                                                    className="w-full h-full glass-input rounded-xl pl-4 pr-10 py-4 font-mono text-lg shadow-xl" 
-                                                    onKeyDown={(e) => e.key === 'Enter' && submitAnswer()}
-                                                />
-                                                <button 
-                                                    onClick={() => setShowKeyboard(!showKeyboard)} 
-                                                    className={`absolute right-3 top-1/2 transform -translate-y-1/2 p-2 rounded-lg transition-colors ${showKeyboard ? 'text-blue-400 bg-white/10' : 'text-slate-400 hover:text-white'}`}
-                                                >
-                                                    ⌨️
-                                                </button>
+                                                <input ref={inputRef} type="text" value={input} onChange={(e) => setInput(e.target.value)} onFocus={() => setShowKeyboard(true)} placeholder="Enter final answer..." className="w-full h-full glass-input rounded-xl pl-4 pr-10 py-4 font-mono text-lg shadow-xl" onKeyDown={(e) => e.key === 'Enter' && submitAnswer()}/>
+                                                <button onClick={() => setShowKeyboard(!showKeyboard)} className={`absolute right-3 top-1/2 transform -translate-y-1/2 p-2 rounded-lg transition-colors ${showKeyboard ? 'text-blue-400 bg-white/10' : 'text-slate-400 hover:text-white'}`}>⌨️</button>
                                             </div>
-
-                                            <button onClick={() => { setSidebarTab('tutor'); document.getElementById('tutor-drawer').classList.toggle('translate-x-full'); }} className="bg-slate-700 hover:bg-slate-600 text-white w-14 rounded-xl shadow-lg transition-all md:hidden">
-                                                ?
-                                            </button>
+                                            <button onClick={() => { setSidebarTab('tutor'); document.getElementById('tutor-drawer').classList.toggle('translate-x-full'); }} className="bg-slate-700 hover:bg-slate-600 text-white w-14 rounded-xl shadow-lg transition-all md:hidden">?</button>
                                         </div>
                                     </div>
                                 )}
                             </div>
                         </div>
 
-                        {/* Modals */}
                         {showClearConfirm && (
                             <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
                                 <div className="glass-panel p-8 rounded-2xl max-w-sm w-full text-center shadow-2xl transform scale-100 transition-all">
                                     <h3 className="text-xl font-bold text-white mb-2">Clear Workspace?</h3>
-                                    <p className="text-slate-400 mb-6 text-sm">This will erase all your current working. This action cannot be undone.</p>
-                                    <div className="flex gap-3">
+                                    <div className="flex gap-3 mt-6">
                                         <button onClick={() => setShowClearConfirm(false)} className="flex-1 py-3 rounded-xl bg-slate-700 text-white font-bold hover:bg-slate-600 transition-colors">CANCEL</button>
                                         <button onClick={() => { const ctx = ctxRef.current; ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height); setShowClearConfirm(false); }} className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-500 transition-colors shadow-lg shadow-red-900/30">CLEAR ALL</button>
                                     </div>
@@ -903,8 +954,7 @@
                             <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
                                 <div className="glass-panel p-8 rounded-2xl max-w-sm w-full text-center shadow-2xl transform scale-100 transition-all">
                                     <h3 className="text-xl font-bold text-white mb-2">Surrender Question?</h3>
-                                    <p className="text-slate-400 mb-6 text-sm">You will receive 0 marks. The AI will reveal the solution steps.</p>
-                                    <div className="flex gap-3">
+                                    <div className="flex gap-3 mt-6">
                                         <button onClick={() => setShowGiveUpConfirm(false)} className="flex-1 py-3 rounded-xl bg-slate-700 text-white font-bold hover:bg-slate-600 transition-colors">CANCEL</button>
                                         <button onClick={handleSurrender} className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-500 transition-colors shadow-lg shadow-red-900/30">SURRENDER</button>
                                     </div>
@@ -922,12 +972,6 @@
                         {sidebarTab === 'tutor' && (
                             <div className="flex-1 flex flex-col animate-fade-in">
                                 <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-                                    {messages.length === 0 && (
-                                        <div className="text-center text-slate-500 text-xs mt-10">
-                                            <div className="text-2xl mb-2">👋</div>
-                                            Ask me for a hint!<br/>I won't give you the answer.
-                                        </div>
-                                    )}
                                     {messages.map((m, i) => (
                                         <div key={i} className={`p-3 rounded-xl text-sm ${m.role === 'user' ? 'bg-blue-600/20 text-blue-100 ml-4 border border-blue-500/20' : 'bg-slate-800 text-slate-300 mr-4 border border-white/5'}`}>
                                             <LatexRenderer text={m.text} />
@@ -935,7 +979,7 @@
                                     ))}
                                 </div>
                                 <div className="p-4 border-t border-white/10 space-y-3 bg-slate-900/40">
-                                    <button onClick={async () => { if (!apiKey || evaluating) return; setEvaluating(true); pauseGen.current = true; try { const canvasImage = canvasRef.current.toDataURL("image/png").split(',')[1]; const prompt = `Review working for: "${question.text}". Briefly identify errors.`; const payload = { contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: "image/png", data: canvasImage } }] }] }; const data = await callGeminiAPI(payload, apiKey); setMessages(prev => [...prev, {role: 'ai', text: `👀 Analysis: ${data.candidates[0].content.parts[0].text}`}]); } catch(e) { setMessages(prev => [...prev, {role: 'ai', text: "Offline."}]); } setEvaluating(false); pauseGen.current = false; }} disabled={evaluating} className="w-full py-3 border border-white/10 rounded-lg text-xs font-bold text-slate-300 hover:bg-white/5 flex items-center justify-center gap-2 transition-colors">{evaluating ? "ANALYZING..." : "👁 CHECK WORKING"}</button>
+                                    <button onClick={async () => { if (!apiKey || evaluating) return; setEvaluating(true); pauseGen.current = true; try { const canvasImage = canvasRef.current.toDataURL("image/png").split(',')[1]; const prompt = `Review working for: "${question.text}". Briefly identify errors.`; const payload = { contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: "image/png", data: canvasImage } }] }] }; const data = await callGeminiAPI(payload, apiKey); setMessages(prev => [...prev, {role: 'ai', text: `👀 Analysis: ${data.candidates[0].content.parts[0].text}`}]); } catch(e) { setMessages(prev => [...prev, {role: 'ai', text: "Error: " + e.message}]); } setEvaluating(false); pauseGen.current = false; }} disabled={evaluating} className="w-full py-3 border border-white/10 rounded-lg text-xs font-bold text-slate-300 hover:bg-white/5 flex items-center justify-center gap-2 transition-colors">{evaluating ? "ANALYZING..." : "👁 CHECK WORKING"}</button>
                                     <div className="flex gap-2">
                                         <input value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder="Ask for a hint..." className="flex-1 glass-input p-2 rounded-lg text-xs" onKeyDown={e => e.key === 'Enter' && askTutor()}/>
                                         <button onClick={askTutor} className="bg-blue-600 p-2 rounded-lg text-white hover:bg-blue-500"><svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg></button>
@@ -952,12 +996,10 @@
                                             <div className={`text-5xl font-black mb-2 ${question.grading.correct ? 'text-emerald-400' : 'text-red-400'}`}>{question.grading.mark}/{question.marks}</div>
                                             <div className="text-xs uppercase tracking-widest text-slate-500">Marks Awarded</div>
                                         </div>
-                                        
                                         <div className="bg-white/5 rounded-xl p-4 border border-white/5">
                                             <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Correct Answer</h4>
                                             <div className="text-sm font-mono text-white"><LatexRenderer text={question.answer} /></div>
                                         </div>
-
                                         <div className="space-y-3">
                                             <div className="bg-emerald-900/10 p-4 rounded-xl border-l-2 border-emerald-500">
                                                 <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1">Positives</h4>
@@ -1057,14 +1099,6 @@
                     doc.text(splitFeed, 22, y);
                     y += (splitFeed.length * 5) + 10;
                 });
-                
-                const pageCount = doc.internal.getNumberOfPages();
-                for(let i = 1; i <= pageCount; i++) {
-                    doc.setPage(i);
-                    doc.setFontSize(8);
-                    doc.setTextColor(150);
-                    doc.text(`Eric / CCPSPY | Willetton SHS`, 105, 290, null, null, "center");
-                }
                 
                 doc.save(`ATAR_Report_${user.name}.pdf`);
             };
