@@ -1,3 +1,9 @@
+<!-- 
+    ATAR HELPER | AI TUTOR
+    PROPERTY OF ERIC / CCPSPY
+    WILLETTON SENIOR HIGH SCHOOL
+    COPYRIGHT 2026 - ALL RIGHTS RESERVED
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -14,16 +20,14 @@
     <!-- KaTeX for Math Rendering -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-    <!-- PDF.js for Database Reading -->
+    <!-- PDF.js (Reading) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+    <!-- jsPDF (Writing Reports) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <script>
-        // Configure PDF.js worker
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    </script>
-
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&family=Caveat:wght@700&display=swap');
         
@@ -38,9 +42,9 @@
 
         /* Glassmorphism Classes */
         .glass-panel {
-            background: rgba(15, 23, 42, 0.25);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
+            background: rgba(15, 23, 42, 0.45); 
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
             border: 1px solid rgba(255, 255, 255, 0.08);
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
         }
@@ -51,20 +55,14 @@
             color: white;
             transition: all 0.3s ease;
         }
-        .glass-input:focus {
-            background: rgba(0, 0, 0, 0.5);
-            border-color: rgba(34, 211, 238, 0.6);
-            box-shadow: 0 0 20px rgba(34, 211, 238, 0.2);
-            outline: none;
-        }
+        .glass-input:focus { outline: none; border-color: #22d3ee; box-shadow: 0 0 20px rgba(34, 211, 238, 0.15); }
 
         .premium-btn {
             background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%);
             border: 1px solid rgba(255,255,255,0.1);
             backdrop-filter: blur(4px);
             transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-            position: relative;
-            overflow: hidden;
+            position: relative; overflow: hidden;
         }
         .premium-btn:hover:not(:disabled) {
             background: rgba(34, 211, 238, 0.15);
@@ -74,29 +72,46 @@
             text-shadow: 0 0 8px rgba(34, 211, 238, 0.8);
         }
         .premium-btn:active:not(:disabled) { transform: scale(0.98); }
-        .premium-btn:disabled { opacity: 0.5; cursor: wait; }
+        .premium-btn:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(1); }
 
-        /* Loaders & Spinners */
+        /* Loader */
         .loader-ring { display: inline-block; position: relative; width: 64px; height: 64px; }
-        .loader-ring div { box-sizing: border-box; display: block; position: absolute; width: 50px; height: 50px; margin: 8px; border: 4px solid #22d3ee; border-radius: 50%; animation: loader-ring 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite; border-color: #22d3ee transparent transparent transparent; }
+        .loader-ring div { 
+            box-sizing: border-box; display: block; position: absolute; width: 50px; height: 50px; margin: 7px; 
+            border: 3px solid #22d3ee; border-radius: 50%; 
+            animation: loader-ring 1.2s linear infinite; /* Smooth linear spin */
+            border-color: #22d3ee transparent transparent transparent; 
+            will-change: transform;
+        }
         .loader-ring div:nth-child(1) { animation-delay: -0.45s; }
         .loader-ring div:nth-child(2) { animation-delay: -0.3s; }
         .loader-ring div:nth-child(3) { animation-delay: -0.15s; }
         @keyframes loader-ring { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        @keyframes spin-border { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .spin-border { position: relative; z-index: 0; }
-        .spin-border::before { content: ''; position: absolute; inset: -2px; border-radius: 50%; padding: 2px; background: conic-gradient(from 0deg, transparent, #22d3ee, transparent); -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; animation: spin-border 1.5s linear infinite; z-index: -1; }
+        /* Feedback Slide-in */
+        .slide-panel { transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); transform: translateX(100%); }
+        .slide-panel.open { transform: translateX(0); }
+
+        /* Sidebar Spinner - Fixed Shape */
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .spin-border { position: relative; }
+        .spin-border::before {
+            content: ''; position: absolute; inset: -3px; border-radius: 50%; padding: 3px;
+            background: conic-gradient(from 0deg, transparent, #22d3ee, transparent);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor; mask-composite: exclude;
+            animation: spin 1s linear infinite; z-index: -1;
+        }
 
         .animate-fade-in { animation: fadeIn 0.5s ease-out forwards; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-
-        /* Custom Scroll & Range */
+        
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+        
         input[type=range] { -webkit-appearance: none; background: transparent; }
         input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: #22d3ee; margin-top: -6px; cursor: pointer; }
         input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: rgba(255,255,255,0.2); border-radius: 2px; }
-        .custom-scroll::-webkit-scrollbar { width: 4px; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
     </style>
 </head>
 <body>
@@ -105,24 +120,26 @@
     <script type="text/babel">
         const { useState, useEffect, useRef, useMemo, memo, useCallback } = React;
 
-        // --- GLOBAL CONTEXT STORE (For PDFs) ---
+        // --- GLOBAL KEY STORE ---
+        let GEMINI_KEYS = []; 
         let SUBJECT_CONTEXT = ""; 
 
-        // --- FALLBACK QUESTIONS (Robust Offline Mode) ---
-        const FALLBACKS = {
-            "Methods": [
-                { text: "Determine the derivative of $f(x) = x^2 e^x$.", topic: "Calculus", answer: "$x e^x (2 + x)$", hint: "Use Product Rule: $u'v + uv'$" },
-                { text: "Solve for x: $2\\ln(x) = \\ln(x+2)$.", topic: "Logarithms", answer: "$x=2$", hint: "Use log laws to combine, then solve quadratic." },
-                { text: "Find the area under $y=x^2$ from $x=0$ to $x=3$.", topic: "Integration", answer: "$9$", hint: "Definite integral $\\int_0^3 x^2 dx$." },
-                { text: "If $P(A)=0.4, P(B)=0.5$, find $P(A \\cup B)$ if independent.", topic: "Probability", answer: "$0.7$", hint: "$P(A \\cap B) = P(A)P(B)$" }
-            ],
-            "Physics": [
-                { text: "A 2kg mass accelerates at $3 m/s^2$. Find the force.", topic: "Dynamics", answer: "$6 N$", hint: "$F=ma$" },
-                { text: "Calculate the kinetic energy of a 4kg object at $5 m/s$.", topic: "Energy", answer: "$50 J$", hint: "$E_k = \\frac{1}{2}mv^2$" }
-            ]
-        };
+        const decodeBase64 = (str) => { try { let d=atob(str); if(d.includes("AIza"))return d; return null; } catch(e){return null;} }
 
-        // --- CURRICULUM DATA ---
+        async function initKeys() {
+            try {
+                const ts = new Date().getTime();
+                const res = await fetch(`GE.txt?v=${ts}`); 
+                if (!res.ok) return;
+                const txt = await res.text();
+                GEMINI_KEYS = txt.split('\n').map(k=>k.trim()).filter(k=>k.length>5).map(k => { 
+                    if(k.startsWith("AIza")) return k; 
+                    return decodeBase64(k); 
+                }).filter(k=>k);
+                console.log("Gemini Keys Active:", GEMINI_KEYS.length);
+            } catch(e) { console.warn("Key Load Error"); }
+        }
+
         const CURRICULUM = {
             "Methods": { "Year 11": { "Unit 1": ["Functions", "Trig", "Prob"], "Unit 2": ["Calculus", "Exp/Log", "Series"] }, "Year 12": { "Unit 3": ["Calculus II", "Integrals", "Random Var"], "Unit 4": ["Logarithms", "Continuous Var", "Stats"] } },
             "Spec": { "Year 11": { "Unit 1": ["Combinatorics", "Vectors", "Geometry"], "Unit 2": ["Trig", "Matrices", "Complex"] }, "Year 12": { "Unit 3": ["Complex II", "Sketching", "Vectors 3D"], "Unit 4": ["Integration II", "Diff Eq", "Stats"] } },
@@ -130,112 +147,130 @@
             "Chem": { "Year 11": { "Unit 1": ["Atomic", "Bonding", "Organic"], "Unit 2": ["Forces", "Solutions", "Gases"] }, "Year 12": { "Unit 3": ["Equilibrium", "Acids", "Redox"], "Unit 4": ["Organic II", "Polymers", "Synthesis"] } }
         };
 
-        // --- AI ENGINE ---
         const AI_ENGINE = {
             checkDatabase: async (subject, level) => {
                 const safeLevel = level.replace(/ /g, '%20');
-                const url = `data/${subject}/${safeLevel}/1.pdf`;
                 try {
-                    const res = await fetch(url, { method: 'HEAD' });
+                    const res = await fetch(`data/${subject}/${safeLevel}/1.pdf`, { method: 'HEAD' });
                     return res.ok;
                 } catch { return false; }
             },
 
             loadContext: async (subject, level) => {
                 SUBJECT_CONTEXT = "";
-                let context = "";
                 const safeLevel = level.replace(/ /g, '%20');
-                
-                for (let i = 1; i <= 3; i++) {
+                let context = "";
+                let i = 1;
+                while(true) {
                     try {
                         const url = `data/${subject}/${safeLevel}/${i}.pdf`;
                         const res = await fetch(url);
                         if (!res.ok) break;
                         const blob = await res.blob();
-                        const arrayBuffer = await blob.arrayBuffer();
-                        const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
-                        for(let p=1; p<=Math.min(pdf.numPages, 2); p++) {
+                        const pdf = await pdfjsLib.getDocument(await blob.arrayBuffer()).promise;
+                        for(let p=1; p<=Math.min(pdf.numPages, 4); p++) {
                             const page = await pdf.getPage(p);
-                            const textContent = await page.getTextContent();
-                            context += textContent.items.map(item => item.str).join(" ") + " ";
+                            const content = await page.getTextContent();
+                            context += content.items.map(item => item.str).join(" ") + " ";
                         }
+                        i++;
+                        if(i > 30) break; 
                     } catch (e) { break; }
                 }
-                SUBJECT_CONTEXT = context.substring(0, 3000); 
+                SUBJECT_CONTEXT = context.substring(0, 15000); 
             },
 
-            fetchWithRetry: async (prompt, jsonMode = false) => {
-                const seed = Math.floor(Math.random() * 1000000);
-                const url = `https://text.pollinations.ai/`;
-                const body = `${prompt}\n\n(Seed: ${seed})`;
-                
-                try {
-                    const response = await fetch(`${url}?model=openai${jsonMode ? '&json=true' : ''}`, {
-                        method: 'POST',
-                        headers: {'Content-Type': 'text/plain'},
-                        body: body
-                    });
-                    if (!response.ok) throw new Error("HTTP Error");
-                    return await response.text();
-                } catch (e) {
+            callGemini: async (prompt, imageData = null, jsonMode = false) => {
+                if (GEMINI_KEYS.length === 0) throw new Error("No Gemini Keys found. Please upload GE.txt.");
+                const models = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"];
+                const parts = [{ text: prompt }];
+                if (imageData) parts.push({ inline_data: { mime_type: "image/png", data: imageData } });
+
+                let lastError = null;
+                for (const model of models) {
+                    const key = GEMINI_KEYS[Math.floor(Math.random() * GEMINI_KEYS.length)];
                     try {
-                        const response2 = await fetch(`${url}?model=mistral${jsonMode ? '&json=true' : ''}`, {
+                        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
                             method: 'POST',
-                            headers: {'Content-Type': 'text/plain'},
-                            body: body
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                contents: [{ parts: parts }],
+                                generationConfig: { responseMimeType: jsonMode ? "application/json" : "text/plain", temperature: 0.7 }
+                            })
                         });
-                        if (!response2.ok) throw new Error("Backup Failed");
-                        return await response2.text();
-                    } catch(e2) { throw new Error("AI Offline"); }
+                        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                        const data = await response.json();
+                        return data.candidates[0].content.parts[0].text;
+                    } catch (e) { lastError = e; continue; }
                 }
+                throw lastError || new Error("All Gemini models failed");
             },
 
             generateQuestion: async (subject, level, topics) => {
-                const topic = topics.length > 0 ? topics[Math.floor(Math.random() * topics.length)] : subject;
-                const contextStr = SUBJECT_CONTEXT ? `Reference Material (Style/Content): ${SUBJECT_CONTEXT}` : "";
-                
-                const prompt = `Create a WACE ATAR exam question for ${subject} ${level} - ${topic}.
-                ${contextStr}
-                INSTRUCTIONS:
-                1. Return raw JSON: {"text":"Question content...","topic":"${topic}","answer":"Short Answer","hint":"Hint"}.
-                2. Use LaTeX for math like $x^2$. Use double slash \\ for newlines.
-                3. NO words like 'space', 'blank', 'page', 'working'.
-                4. NO sub-questions (a,b,c). One single question only.
-                5. Use clear paragraphs.`;
-                
+                const topic = topics.length > 0 ? topics[Math.floor(Math.random() * topics.length)] : "General";
                 try {
-                    const text = await AI_ENGINE.fetchWithRetry(prompt, true);
-                    const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
-                    const start = cleanText.indexOf('{');
-                    const end = cleanText.lastIndexOf('}');
-                    if (start === -1 || end === -1) throw new Error("JSON Error");
-                    return JSON.parse(cleanText.substring(start, end+1));
+                    const prompt = `Role: WACE ATAR Exam Writer. Subject: ${subject} ${level} - ${topic}.
+                    ${SUBJECT_CONTEXT ? 'Context: ' + SUBJECT_CONTEXT.substring(0, 3000) : ''}
+                    Task: Generate a challenging single-part question and assign marks (e.g. 2, 3, 4, 5) based on difficulty.
+                    Output: JSON ONLY. Format: 
+                    {"text":"Question (LaTeX $...$)","topic":"${topic}","answer":"Short Answer","hint":"Hint", "marks": 4}.
+                    Constraint: Single part only. No 'a)', 'b)'. No 'Leave space'.`;
+                    
+                    const text = await AI_ENGINE.callGemini(prompt, null, true);
+                    return JSON.parse(text);
                 } catch (e) {
-                    // Smart Fallback Selection
-                    const list = FALLBACKS[subject] || FALLBACKS["Methods"];
-                    const fallback = list[Math.floor(Math.random() * list.length)];
-                    return { ...fallback, text: `(Offline) ${fallback.text}` };
+                    return {
+                        text: `(Offline) Evaluate $\\int 5x^4 dx$.`, topic: "Calculus", answer: "$x^5 + C$", hint: "Power Rule", marks: 3, isOffline: true
+                    };
                 }
             },
 
-            checkAnswer: async (user, actual, questionText) => {
+            gradeSubmission: async (userText, actualAns, questionText, canvasDataUrl, maxMarks) => {
                 try {
-                    const prompt = `Q: ${questionText}\nReal Ans: ${actual}\nStudent Ans: ${user}\nIs correct? Return JSON: {"correct": true/false, "feedback": "Brief LaTeX feedback"}`;
-                    const text = await AI_ENGINE.fetchWithRetry(prompt, true);
-                    const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
-                    const start = cleanText.indexOf('{');
-                    const end = cleanText.lastIndexOf('}');
-                    return JSON.parse(cleanText.substring(start, end+1));
-                } catch(e) {
-                    const isMatch = user.replace(/\s/g,'') === actual.replace(/\s/g,'');
-                    return { correct: isMatch, feedback: isMatch ? "Exact match found." : "Connection failed, tried exact match." };
+                    const base64Image = canvasDataUrl ? canvasDataUrl.split(',')[1] : null;
+                    const prompt = `Role: Senior Teacher. Task: Grade Student.
+                    Question: ${questionText}
+                    Correct Answer: ${actualAns}
+                    Student Final Answer (Typed): ${userText}
+                    Max Marks: ${maxMarks}
+                    
+                    Instructions:
+                    1. Check if final answer is correct.
+                    2. If image provided, analyze working out. Award partial marks for logic.
+                    3. Be concise.
+                    
+                    Output JSON ONLY:
+                    {
+                        "mark": number,
+                        "correct": boolean,
+                        "feedback": {
+                            "positives": "Good points",
+                            "negatives": "Mistakes",
+                            "improvements": "How to fix"
+                        }
+                    }`;
+                    
+                    const text = await AI_ENGINE.callGemini(prompt, base64Image, true);
+                    return JSON.parse(text);
+                } catch (e) {
+                    const isMatch = userText.replace(/\s/g,'') === actualAns.replace(/\s/g,'');
+                    return { mark: isMatch ? maxMarks : 0, correct: isMatch, feedback: { positives: "Attempted.", negatives: isMatch ? "None." : "Incorrect.", improvements: "Check formula." } };
                 }
             },
 
-            ask: async (prompt, systemContext) => {
+            ask: async (prompt, context) => {
                 try {
-                    return await AI_ENGINE.fetchWithRetry(`System: ${systemContext}. User: ${prompt}. Reply concisely with LaTeX.`, false);
-                } catch(e) { return "Connection failed."; }
+                    return await AI_ENGINE.callGemini(`System: ${context}. User: ${prompt}. Reply concisely (max 2 sentences). Use LaTeX $...$ for math. No lists.`);
+                } catch (e) { return "Connection failed."; }
+            },
+
+            checkWork: async (canvasDataUrl, questionText, actualAnswer) => {
+                try {
+                    const base64Image = canvasDataUrl.split(',')[1]; 
+                    const prompt = `Teacher Task: Check this working. Q: ${questionText}. Ans: ${actualAnswer}.
+                    Output: 1 sentence hint/feedback.`;
+                    return await AI_ENGINE.callGemini(prompt, base64Image, false);
+                } catch (e) { return "Image analysis failed."; }
             }
         };
 
@@ -243,100 +278,67 @@
         const MathText = ({ text }) => {
             if (!text) return null;
             let clean = text
-                .replace(/Leave space for working/gi, '')
-                .replace(/(?<!\\)\bspace\b/gi, ' ') // Remove standalone "space"
-                .replace(/\\n/g, '\n'); 
+                .replace(/Leave space/gi, '')
+                .replace(/(\bspace\b)/gi, ' ')
+                .replace(/\\begin\{enumerate\}/g, '')
+                .replace(/\\end\{enumerate\}/g, '')
+                .replace(/\\item/g, '\n• ')
+                .replace(/\\/g, '\\'); 
+            
+            // Fix squashed words
+            clean = clean.replace(/([a-zA-Z])(\$)/g, '$1 $2').replace(/(\$)([a-zA-Z])/g, '$1 $2');
 
-            // Detect paragraphs
-            const paragraphs = clean.split('\n');
-
+            const parts = clean.split(/(\$[^$]+\$)/g);
             return (
-                <div className="leading-relaxed tracking-normal font-sans text-lg">
-                    {paragraphs.map((para, pIdx) => (
-                        <div key={pIdx} className="mb-4 whitespace-pre-wrap break-words">
-                            {para.split(/(\$[^$]+\$)/g).map((part, index) => {
-                                if (part.startsWith('$') && part.endsWith('$')) {
-                                    const mathContent = part.slice(1, -1);
-                                    return (
-                                        <span key={index} className="mx-1 inline-block text-cyan-200 align-middle"
-                                            dangerouslySetInnerHTML={{ __html: katex.renderToString(mathContent, { throwOnError: false, displayMode: false }) }} 
-                                        />
-                                    );
-                                }
-                                return <span key={index}>{part}</span>;
-                            })}
-                        </div>
-                    ))}
+                <div className="text-lg leading-relaxed font-sans text-slate-200">
+                    {parts.map((part, i) => {
+                        if (part.startsWith('$') && part.endsWith('$')) {
+                            return <span key={i} className="text-cyan-300 mx-1 font-serif" dangerouslySetInnerHTML={{__html: katex.renderToString(part.slice(1,-1), {throwOnError:false})}} />;
+                        }
+                        return <span key={i}>{part}</span>;
+                    })}
                 </div>
             );
         };
 
-        // --- VISUAL COMPONENTS ---
-        const EasterEggBackground = memo(({ active }) => {
-            const [items, setItems] = useState([]);
-            useEffect(() => {
-                setItems(Array.from({ length: 15 }, (_, i) => ({
-                    id: i, char: ["∫", "∑", "π", "e", "θ"][i%5],
-                    x: Math.random() * 90, y: Math.random() * 90,
-                    vx: (Math.random()-0.5)*0.2, vy: (Math.random()-0.5)*0.2
-                })));
-            }, []);
-            useEffect(() => {
-                const interval = setInterval(() => {
-                    setItems(prev => prev.map(p => ({
-                        ...p, x: p.x+p.vx, y: p.y+p.vy, 
-                        vx: (p.x<0||p.x>95)?-p.vx:p.vx, vy: (p.y<0||p.y>95)?-p.vy:p.vy
-                    })));
-                }, 50);
-                return () => clearInterval(interval);
-            }, []);
-            return (
-                <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-                    {items.map(item => (
-                        <div key={item.id} className="absolute text-slate-700 text-4xl opacity-20 transition-transform duration-1000"
-                             style={{left: `${item.x}%`, top: `${item.y}%`}}>
-                            {item.char}
-                        </div>
-                    ))}
-                </div>
-            );
-        });
-
-        const Whiteboard = memo(({ tool, color, size, triggerClear, teacherMarks, hasDrawnRef }) => {
+        // --- COMPONENTS ---
+        const Whiteboard = memo(({ tool, color, size, triggerClear, teacherMarks, hasDrawnRef, getCanvasRef }) => {
             const canvasRef = useRef(null);
             const ctxRef = useRef(null);
             const [isDrawing, setIsDrawing] = useState(false);
 
             useEffect(() => {
+                if(getCanvasRef) getCanvasRef(canvasRef);
                 const canvas = canvasRef.current;
-                const dpr = window.devicePixelRatio || 1;
-                const rect = canvas.getBoundingClientRect();
-                canvas.width = rect.width * dpr; canvas.height = rect.height * dpr;
-                const ctx = canvas.getContext('2d');
-                ctx.scale(dpr, dpr); ctx.lineCap = "round"; ctx.lineJoin = "round";
-                contextRef.current = ctx;
+                const resize = () => {
+                    const rect = canvas.getBoundingClientRect();
+                    canvas.width = rect.width; canvas.height = rect.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.lineCap = "round"; ctx.lineJoin = "round";
+                    ctxRef.current = ctx;
+                };
+                resize();
+                window.addEventListener('resize', resize);
+                return () => window.removeEventListener('resize', resize);
             }, []);
 
             useEffect(() => {
-                if (triggerClear > 0) {
-                    const ctx = contextRef.current;
-                    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+                if (triggerClear > 0 && ctxRef.current) {
+                    ctxRef.current.clearRect(0,0,canvasRef.current.width, canvasRef.current.height);
                     if(hasDrawnRef) hasDrawnRef.current = false;
                 }
             }, [triggerClear]);
 
             useEffect(() => {
-                if (teacherMarks?.length) {
-                    const ctx = contextRef.current;
-                    ctx.save(); ctx.strokeStyle = '#ef4444'; ctx.fillStyle = '#ef4444'; ctx.lineWidth = 3; ctx.font = "bold 24px sans-serif";
-                    teacherMarks.forEach((mark, i) => {
-                        setTimeout(() => {
-                            if (mark.type === 'tick') {
-                                ctx.beginPath(); ctx.moveTo(mark.x, mark.y); ctx.lineTo(mark.x + 10, mark.y + 20); ctx.lineTo(mark.x + 40, mark.y - 40); ctx.stroke();
-                            } else if (mark.type === 'cross') {
-                                ctx.beginPath(); ctx.moveTo(mark.x, mark.y); ctx.lineTo(mark.x + 30, mark.y + 30); ctx.moveTo(mark.x + 30, mark.y); ctx.lineTo(mark.x, mark.y + 30); ctx.stroke();
-                            }
-                        }, i * 300);
+                if (teacherMarks?.length && ctxRef.current) {
+                    const ctx = ctxRef.current;
+                    ctx.save(); 
+                    teacherMarks.forEach((m) => {
+                        ctx.strokeStyle = m.type === 'tick' ? '#10b981' : '#ef4444';
+                        ctx.lineWidth = 5; ctx.beginPath();
+                        if(m.type === 'tick') { ctx.moveTo(m.x, m.y); ctx.lineTo(m.x+15, m.y+30); ctx.lineTo(m.x+50, m.y-40); }
+                        else { ctx.moveTo(m.x, m.y); ctx.lineTo(m.x+40, m.y+40); ctx.moveTo(m.x+40, m.y); ctx.lineTo(m.x, m.y+40); }
+                        ctx.stroke();
                     });
                     ctx.restore();
                 }
@@ -349,24 +351,38 @@
                 return { x: clientX - rect.left, y: clientY - rect.top };
             };
 
-            const startDrawing = (e) => {
-                contextRef.current.beginPath(); 
-                const {x,y} = getPos(e); contextRef.current.moveTo(x,y);
+            const start = (e) => {
+                const {x,y} = getPos(e);
+                ctxRef.current.beginPath(); ctxRef.current.moveTo(x,y);
                 setIsDrawing(true);
                 if(hasDrawnRef) hasDrawnRef.current = true;
             };
 
-            const draw = (e) => {
-                if (!isDrawing) return;
-                const { x, y } = getPos(e);
-                const ctx = contextRef.current;
-                if (tool === 'eraser') { ctx.globalCompositeOperation = 'destination-out'; ctx.lineWidth = size * 5; } 
+            const move = (e) => {
+                if(!isDrawing) return;
+                const {x,y} = getPos(e);
+                const ctx = ctxRef.current;
+                if(tool==='eraser') { ctx.globalCompositeOperation = 'destination-out'; ctx.lineWidth = size*10; }
                 else { ctx.globalCompositeOperation = 'source-over'; ctx.lineWidth = size; ctx.strokeStyle = color; }
-                ctx.lineTo(x, y); ctx.stroke();
+                ctx.lineTo(x,y); ctx.stroke();
             };
 
-            return <canvas ref={canvasRef} onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={()=>setIsDrawing(false)} onMouseLeave={()=>setIsDrawing(false)} onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={()=>setIsDrawing(false)} className="w-full h-full cursor-crosshair touch-none" style={{ background: 'transparent' }} />;
+            return <canvas ref={canvasRef} onMouseDown={start} onMouseMove={move} onMouseUp={()=>setIsDrawing(false)} onMouseLeave={()=>setIsDrawing(false)} onTouchStart={start} onTouchMove={move} onTouchEnd={()=>setIsDrawing(false)} className="w-full h-full cursor-crosshair touch-none" />;
         });
+
+        const FeedbackPanel = ({ data, isOpen }) => {
+            if (!isOpen || !data) return null;
+            return (
+                <div className={`slide-panel absolute top-0 right-96 h-full w-80 bg-slate-900/95 backdrop-blur-xl border-x border-white/10 p-6 z-40 transform transition-transform duration-500 ${isOpen ? 'translate-x-0' : 'translate-x-full'} shadow-2xl flex flex-col`}>
+                    <div className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400 mb-6 mt-16">Results: {data.mark}/{data.maxMarks}</div>
+                    <div className="space-y-4 flex-1 overflow-y-auto custom-scroll">
+                        <div className="bg-emerald-900/20 border border-emerald-500/30 p-3 rounded-xl"><div className="text-xs font-bold text-emerald-400 uppercase mb-1">Good</div><MathText text={data.feedback.positives} /></div>
+                        {data.mark < data.maxMarks && <div className="bg-red-900/20 border border-red-500/30 p-3 rounded-xl"><div className="text-xs font-bold text-red-400 uppercase mb-1">Mistakes</div><MathText text={data.feedback.negatives} /></div>}
+                        <div className="bg-blue-900/20 border border-blue-500/30 p-3 rounded-xl"><div className="text-xs font-bold text-blue-400 uppercase mb-1">Improve</div><MathText text={data.feedback.improvements} /></div>
+                    </div>
+                </div>
+            );
+        };
 
         const Modal = ({ isOpen, message, onConfirm, onCancel, confirmText="Yes" }) => {
             if (!isOpen) return null;
@@ -385,52 +401,62 @@
         };
 
         const ReportCard = ({ questions, timer, user, subject, level, onClose }) => {
-            const correct = questions.filter(q => q.status === 'correct').length;
-            const score = Math.round((correct / questions.length) * 100);
-            
+            const totalMarks = questions.reduce((acc, q) => acc + (q.userMark || 0), 0);
+            const maxMarks = questions.reduce((acc, q) => acc + (q.maxMarks || 3), 0);
+            const percent = Math.round((totalMarks/maxMarks)*100) || 0;
             const downloadReport = () => {
-                const text = `ATAR HELPER REPORT\nName: ${user}\nSubject: ${subject} ${level}\nScore: ${score}%\nTime: ${Math.floor(timer/60)}m ${timer%60}s\n\nBREAKDOWN:\n${questions.map((q,i) => `Q${i+1}: ${q.status.toUpperCase()}`).join('\n')}`;
-                const blob = new Blob([text], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url; a.download = `Report_${user}.txt`; a.click();
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(22);
+                doc.text("ATAR HELPER REPORT", 105, 20, null, null, "center");
+                
+                doc.setFontSize(12);
+                doc.setFont("helvetica", "normal");
+                doc.text(`Student: ${user}`, 20, 40);
+                doc.text(`Subject: ${subject} ${level}`, 20, 50);
+                doc.text(`Score: ${totalMarks}/${maxMarks} (${percent}%)`, 20, 60);
+                doc.text(`Time: ${Math.floor(timer/60)}m ${timer%60}s`, 20, 70);
+
+                doc.line(20, 75, 190, 75);
+
+                let y = 85;
+                questions.forEach((q, i) => {
+                    if (y > 270) { doc.addPage(); y = 20; }
+                    doc.setFont("helvetica", "bold");
+                    doc.text(`Q${i+1} [${q.topic}] - ${q.userMark || 0}/${q.maxMarks || 3}`, 20, y);
+                    y += 7;
+                    doc.setFont("helvetica", "normal");
+                    const qText = doc.splitTextToSize(`Question: ${q.text.substring(0, 200).replace(/\$/g, '')}`, 170);
+                    doc.text(qText, 20, y);
+                    y += qText.length * 5 + 2;
+                    doc.setTextColor(100);
+                    const fb = q.feedback?.improvements ? `Feedback: ${q.feedback.improvements}` : "Feedback: Not attempted/Graded";
+                    const fbText = doc.splitTextToSize(fb, 170);
+                    doc.text(fbText, 20, y);
+                    doc.setTextColor(0);
+                    y += fbText.length * 5 + 10;
+                });
+
+                doc.save(`Report_${user}.pdf`);
             };
-            
             return (
                 <div className="absolute inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4 animate-fade-in">
                     <div className="glass-panel p-8 rounded-3xl max-w-2xl w-full border border-white/10">
-                        <h2 className="text-3xl font-bold text-center mb-6 bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">Performance Report</h2>
-                        
+                        <h2 className="text-3xl font-bold text-center mb-6 bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">Final Report</h2>
                         <div className="grid grid-cols-2 gap-4 mb-6">
-                            <div className="bg-white/5 p-4 rounded-xl text-center">
-                                <div className="text-sm text-slate-400 uppercase tracking-wider">Score</div>
-                                <div className="text-4xl font-bold text-white">{score}%</div>
-                            </div>
-                            <div className="bg-white/5 p-4 rounded-xl text-center">
-                                <div className="text-sm text-slate-400 uppercase tracking-wider">Time</div>
-                                <div className="text-4xl font-bold text-white">{Math.floor(timer/60)}m {timer%60}s</div>
-                            </div>
+                            <div className="bg-white/5 p-4 rounded-xl text-center"><div className="text-sm text-slate-400">SCORE</div><div className="text-4xl font-bold text-white">{percent}%</div></div>
+                            <div className="bg-white/5 p-4 rounded-xl text-center"><div className="text-sm text-slate-400">TIME</div><div className="text-4xl font-bold text-white">{Math.floor(timer/60)}m {timer%60}s</div></div>
                         </div>
-
-                        <div className="mb-6 p-4 bg-white/5 rounded-xl">
-                            <div className="text-sm text-slate-400 uppercase tracking-wider mb-2">Tutor Summary</div>
-                            <p className="text-sm text-slate-300 italic">
-                                {score > 80 ? `Outstanding work, ${user}! You have demonstrated mastery in these topics.` : 
-                                 score > 50 ? `Good effort, ${user}. Review ${uniqueWeaknesses[0] || 'your errors'} to improve further.` : 
-                                 `Keep practicing, ${user}. Focus on understanding the core concepts of ${subject}.`}
-                            </p>
-                        </div>
-
                         <div className="flex gap-4">
-                            <button onClick={downloadReport} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-xl transition">Download Report</button>
-                            <button onClick={onClose} className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold py-3 rounded-xl shadow-lg hover:scale-[1.02] transition">Return to Menu</button>
+                            <button onClick={downloadReport} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-xl transition">Download PDF</button>
+                            <button onClick={onClose} className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold py-3 rounded-xl shadow-lg transition">Menu</button>
                         </div>
                     </div>
                 </div>
             );
         };
 
-        // --- MAIN APP ---
         const App = () => {
             const [view, setView] = useState('menu');
             const [user, setUser] = useState('');
@@ -467,7 +493,7 @@
             const canvasRef = useRef(null);
 
             useEffect(() => {
-                AI_ENGINE.checkDatabase('Methods','Year 12').then(setDbStatus);
+                initKeys().then(() => AI_ENGINE.checkDatabase('Methods','Year 12').then(setDbStatus));
             }, []);
 
             useEffect(() => {
@@ -487,9 +513,7 @@
 
             useEffect(() => {
                 let interval;
-                if (view === 'test' && questions[currentQIndex]?.status === 'ready' && !showFeedback) {
-                    interval = setInterval(() => setTimer(t => t + 1), 1000);
-                }
+                if (view === 'test' && questions[currentQIndex]?.status === 'ready' && !showFeedback) interval = setInterval(() => setTimer(t => t + 1), 1000);
                 return () => clearInterval(interval);
             }, [view, questions, currentQIndex, showFeedback]);
 
@@ -502,7 +526,7 @@
 
             const backgroundGenerator = async (count, topics) => {
                 const q1 = await AI_ENGINE.generateQuestion(subject, level, topics);
-                setQuestions(prev => { const n = [...prev]; n[0] = { ...q1, status: 'ready' }; return n; });
+                setQuestions(prev => { const n = [...prev]; n[0] = { ...q1, status: 'ready', maxMarks: q1.marks || 3 }; return n; });
                 setLoading(false);
                 setView('test');
 
@@ -510,7 +534,7 @@
                     await new Promise(r => setTimeout(r, 2000));
                     while(genPaused.current) await new Promise(r => setTimeout(r, 1000));
                     const q = await AI_ENGINE.generateQuestion(subject, level, topics);
-                    setQuestions(prev => { const n = [...prev]; if(n[i]) n[i] = { ...q, status: 'ready' }; return n; });
+                    setQuestions(prev => { const n = [...prev]; if(n[i]) n[i] = { ...q, status: 'ready', maxMarks: q.marks || 3 }; return n; });
                 }
             };
 
@@ -525,222 +549,183 @@
 
             const handleEvaluate = async () => {
                 if(isProcessing) return;
-                setIsProcessing(true);
-                genPaused.current = true;
-                
+                setIsProcessing(true); setGenPaused(true);
                 const q = questions[currentQIndex];
-                
-                setMessages(p => [...p, { role: 'ai', text: "Checking working..." }]);
-                
-                setTimeout(async () => {
-                    if (!hasDrawn.current) {
-                        const hint = await AI_ENGINE.ask("Board empty. Give first step hint.", `Q: ${q.text}`);
-                        setMessages(prev => [...prev, { role: 'ai', text: hint }]);
-                    } else {
-                        const feedback = await AI_ENGINE.ask("Student has working. Give encouragement.", `Q: ${q.text}`);
-                        setMessages(prev => [...prev, { role: 'ai', text: feedback }]);
-                    }
-                    setIsProcessing(false);
-                    genPaused.current = false;
-                }, 1000);
+                setMessages(p => [...p, { role: 'ai', text: "Looking at your working..." }]);
+                try {
+                    let hint = "Board empty.";
+                    if (hasDrawn.current && canvasRef.current) {
+                        const img = canvasRef.current.current.toDataURL('image/png');
+                        hint = await AI_ENGINE.checkWork(img, q.text, q.answer);
+                    } else { hint = await AI_ENGINE.ask("Give hint.", `Q: ${q.text}`); }
+                    setMessages(p => [...p, { role: 'ai', text: hint }]);
+                } catch(e) {} 
+                setIsProcessing(false); setGenPaused(false);
             };
 
-            const handleSubmitAnswer = async () => {
-                if(!userTypedAns.trim() || isProcessing) return;
-                setIsProcessing(true);
-                genPaused.current = true;
-                
+            const handleSubmit = async () => {
+                if(!userAns.trim() || isProcessing) return;
+                setIsProcessing(true); setGenPaused(true);
                 const q = questions[currentQIndex];
-                setMessages(prev => [...prev, { role: 'user', text: `Submitted: ${userTypedAns}` }, { role: 'ai', text: "Verifying..." }]);
-
-                const check = await AI_ENGINE.checkAnswer(userTypedAns, q.answer, q.text);
+                setMessages(p => [...p, { role: 'user', text: `Submitted: ${userAns}` }, { role: 'ai', text: "Grading..." }]);
+                let img = null;
+                if(hasDrawn.current && canvasRef.current) img = canvasRef.current.current.toDataURL('image/png');
                 
-                setMessages(prev => [...prev, { role: 'ai', text: check.feedback }]);
+                const result = await AI_ENGINE.gradeSubmission(userAns, q.answer, q.text, img, q.maxMarks || 3);
                 
-                if (check.correct) {
-                    setTeacherMarks([{ type: 'tick', x: window.innerWidth*0.4, y: window.innerHeight*0.4 }]);
-                    setQuestions(prev => { const n = [...prev]; n[currentQIndex].status = 'correct'; return n; });
-                } else {
-                    setTeacherMarks([{ type: 'cross', x: window.innerWidth*0.4, y: window.innerHeight*0.4 }]);
-                }
-                setIsProcessing(false);
-                genPaused.current = false;
+                setQuestions(prev => {
+                    const n = [...prev];
+                    n[currentQIndex] = { ...n[currentQIndex], status: result.correct ? 'correct' : 'wrong', userMark: result.mark, userAns: userAns, feedback: result.feedback };
+                    return n;
+                });
+                
+                if (result.mark > 0) setTeacherMarks([{ type: 'tick', x: 200, y: 200 }]); else setTeacherMarks([{ type: 'cross', x: 200, y: 200 }]);
+                
+                setCurrentFeedback(result); setShowFeedback(true); setIsProcessing(false); setGenPaused(false);
             };
 
             const handleGiveUp = () => {
-                genPaused.current = true;
                 setModalConfig({
-                    message: "Show answer?", confirmText: "Yes",
+                    message: "Show answer? (0 Marks)", confirmText: "Yes",
                     onConfirm: () => {
                         const q = questions[currentQIndex];
-                        setMessages(prev => [...prev, { role: 'ai', text: `Answer: ${q.answer}` }]);
-                        setQuestions(prev => {
-                            const n = [...prev]; n[currentQIndex].status = 'wrong'; return n;
-                        });
-                        setTeacherMarks([{ type: 'cross', x: window.innerWidth*0.4, y: window.innerHeight*0.4 }]);
+                        setQuestions(prev => { const n = [...prev]; n[currentQIndex].status = 'wrong'; n[currentQIndex].userMark = 0; n[currentQIndex].feedback = { positives: "Skipped", negatives: "Gave up", improvements: "Review topic." }; return n; });
+                        setTeacherMarks([{ type: 'cross', x: 200, y: 200 }]);
+                        setMessages(p => [...p, { role: 'ai', text: `Answer: ${q.answer}` }]);
                         setModalConfig(null);
-                        genPaused.current = false;
                     },
-                    onCancel: () => { setModalConfig(null); genPaused.current = false; }
+                    onCancel: () => setModalConfig(null)
                 });
-            };
-
-            const handleSendMessage = async () => {
-                if (!chatInput.trim() || isProcessing) return;
-                setIsProcessing(true);
-                genPaused.current = true;
-                const txt = chatInput;
-                setChatInput('');
-                setMessages(prev => [...prev, { role: 'user', text: txt }, { role: 'ai', text: "..." }]);
-                
-                const q = questions[currentQIndex];
-                const res = await AI_ENGINE.ask(txt, `Q:${q.text} A:${q.answer}`);
-                
-                setMessages(prev => {
-                    const n = [...prev]; n.pop(); return [...n, { role: 'ai', text: res }];
-                });
-                setIsProcessing(false);
-                genPaused.current = false;
             };
 
             const changeQuestion = (idx) => {
                 if (questions[idx].status === 'generating' || isProcessing) return;
-                setCurrentQIndex(idx);
-                setTeacherMarks([]); setClearBoardTrig(p => p+1); hasDrawn.current = false; setUserTypedAns('');
+                setCurrentQIndex(idx); setTeacherMarks([]); setClearBoardTrig(p => p+1); hasDrawn.current = false; setUserAns(''); setShowFeedback(false);
             };
 
-            const allDone = questions.every(q => q.status === 'correct' || q.status === 'wrong');
+            const handleChat = async () => {
+                if (!chatInput.trim() || isProcessing) return;
+                setIsProcessing(true); setGenPaused(true);
+                const txt = chatInput; setChatInput('');
+                setMessages(p => [...p, { role: 'user', text: txt }, { role: 'ai', text: "..." }]);
+                const q = questions[currentQIndex];
+                const res = await AI_ENGINE.ask(txt, `Q:${questions[currentQIndex]?.text}`);
+                setMessages(p => { const n = [...p]; n.pop(); return [...n, { role: 'ai', text: res }]; });
+                setIsProcessing(false);
+            };
+
             const currentQ = questions[currentQIndex] || { status: 'generating' };
-            const isQLoading = currentQ.status === 'generating';
             const isGraded = currentQ.status === 'correct' || currentQ.status === 'wrong';
+            const allDone = questions.every(q => q.status === 'correct' || q.status === 'wrong');
 
-            // --- RENDER ---
-            if (view === 'menu') return (
-                <div className="h-screen w-screen flex flex-col items-center justify-center p-4 relative">
-                    {/* Data Notice Popup */}
-                    {dbStatus === false && (
-                        <div className="absolute top-10 right-10 z-50 glass-panel p-4 rounded-xl border border-red-500/20 shadow-xl animate-fade-in flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center text-red-400">
-                                <i className="fa-solid fa-triangle-exclamation"></i>
-                            </div>
-                            <div className="text-sm">
-                                <div className="text-white font-bold">No Database Detected</div>
-                                <div className="text-slate-400 text-xs">Using Cloud-Only Mode</div>
-                            </div>
-                            <button onClick={() => setDbStatus(null)} className="ml-2 text-slate-500 hover:text-white"><i className="fa-solid fa-xmark"></i></button>
-                        </div>
-                    )}
-
-                    <div className="z-10 w-full max-w-lg glass-panel rounded-3xl p-10 animate-fade-in">
-                        <h1 className="text-5xl font-bold bg-gradient-to-br from-cyan-300 via-blue-500 to-purple-600 bg-clip-text text-transparent mb-2 text-center">ATAR Helper</h1>
-                        <div className="flex justify-between text-xs opacity-70 mb-8 px-4">
-                            <span className="tracking-widest">BY ERIC</span>
-                            <span>WILLETTON SHS</span>
-                        </div>
-                        <input type="text" value={user} onChange={e => setUser(e.target.value)} className="w-full glass-input rounded-xl px-5 py-4 mb-4" placeholder="Enter Name..." />
-                        <button onClick={() => user ? setView('setup') : alert("Enter name")} className="w-full premium-btn text-white font-bold py-4 rounded-xl">Start Session</button>
-                    </div>
-                    <div className="absolute bottom-4 text-[10px] text-slate-600 font-light select-none opacity-60">© {new Date().getFullYear()} ATAR Helper. All Rights Reserved.</div>
+            // --- RENDERERS ---
+            const LoadingOverlay = () => (
+                <div className="absolute inset-0 bg-black/90 z-50 flex flex-col items-center justify-center">
+                    <div className="loader-ring mb-4"><div></div><div></div><div></div></div>
+                    <div className="text-white text-xl font-bold">Generating Test...</div>
+                    <div className="text-cyan-400 font-mono mt-2">{loadingTime.toFixed(1)}s</div>
+                    <div className="text-slate-500 text-xs mt-1">Est: {questionCount * 2.5}s</div>
                 </div>
             );
 
-            if (view === 'setup' || view === 'topics') {
-                return (
-                    <div className="h-screen w-screen flex items-center justify-center p-4 relative">
-                        {isLoadingInitial && (
-                            <div className="absolute inset-0 bg-black/90 z-50 flex flex-col items-center justify-center text-center">
-                                <div className="loader-ring mb-4"><div></div><div></div><div></div><div></div></div>
-                                <div className="text-white font-bold text-xl">Generating Test...</div>
-                                <div className="text-cyan-400 mt-2 font-mono">{loadingTime.toFixed(1)}s</div>
-                                <div className="text-slate-500 text-xs mt-1">Est: {questionCount * 2.5}s total</div>
+            if (view === 'menu') return (
+                <div className="fixed inset-0 flex flex-col items-center justify-center p-4">
+                    {dbStatus === false && <div className="absolute top-10 right-10 text-xs text-red-400 border border-red-500/20 p-2 rounded glass-panel">No Database (Cloud Mode)</div>}
+                    <div className="glass-panel p-10 rounded-3xl w-full max-w-lg text-center animate-fade-in">
+                        <h1 className="text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-600 mb-2">ATAR Helper</h1>
+                        <div className="flex justify-between text-xs opacity-50 mb-8 px-4"><span>BY ERIC / CCPSPY</span><span>WILLETTON SHS</span></div>
+                        <input className="w-full glass-input p-4 rounded-xl mb-4" placeholder="Enter Name..." value={user} onChange={e=>setUser(e.target.value.toUpperCase())} />
+                        <button onClick={()=>user && setView('setup')} className="w-full premium-btn text-white font-bold p-4 rounded-xl">Start Session</button>
+                    </div>
+                    <div className="absolute bottom-4 text-[10px] text-slate-600 opacity-60">© 2026 Eric/CCPSPY | Willetton SHS</div>
+                </div>
+            );
+
+            if (view === 'setup') return (
+                <div className="fixed inset-0 flex items-center justify-center p-4">
+                    {loading && <LoadingOverlay />}
+                    <div className="glass-panel p-8 rounded-3xl w-full max-w-2xl animate-fade-in">
+                        <h2 className="text-2xl font-bold text-white mb-6">Setup</h2>
+                        <div className="grid grid-cols-2 gap-4 mb-6">
+                            <div className="space-y-2">
+                                {['Methods','Spec','Physics','Chem'].map(s => <button key={s} onClick={()=>setSubject(s)} className={`w-full p-3 rounded-xl border ${subject===s?'border-cyan-500 bg-cyan-500/10 text-white':'border-white/10 text-slate-400'}`}>{s}</button>)}
                             </div>
-                        )}
-                        <div className="z-10 w-full max-w-2xl glass-panel rounded-3xl p-8 animate-fade-in flex flex-col max-h-[90vh]">
-                            {view === 'setup' ? (
-                                <>
-                                    <h2 className="text-2xl font-bold text-white mb-6">Setup</h2>
-                                    <div className="grid grid-cols-2 gap-4 mb-6">
-                                        <div className="space-y-2">
-                                            {['Methods','Spec','Physics','Chem'].map(s => <button key={s} onClick={() => setSubject(s)} className={`w-full py-3 rounded-xl border ${subject===s?'bg-cyan-500/20 border-cyan-500 text-white':'bg-transparent border-white/10 text-slate-400'}`}>{s}</button>)}
-                                        </div>
-                                        <div className="space-y-2">
-                                            {['Year 11','Year 12'].map(l => <button key={l} onClick={() => setLevel(l)} className={`w-full py-3 rounded-xl border ${level===l?'bg-emerald-500/20 border-emerald-500 text-white':'bg-transparent border-white/10 text-slate-400'}`}>{l}</button>)}
-                                        </div>
-                                    </div>
-                                    <button onClick={() => setView('topics')} className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold py-3 rounded-xl shadow-lg">Next</button>
-                                </>
-                            ) : (
-                                <>
-                                    <h2 className="text-2xl font-bold text-white mb-4">Topics</h2>
-                                    <div className="flex gap-2 mb-4">
-                                        {(level === 'Year 11' ? ['Unit 1','Unit 2','Whole Year'] : ['Unit 3','Unit 4','Whole Year']).map(u => {
-                                            return (
-                                                <button key={u} onClick={() => setSelectedUnit(u)} className={`flex-1 py-2 rounded-lg text-sm transition ${selectedUnit===u?'bg-cyan-600 text-white':'bg-white/5 text-slate-400'}`}>
-                                                    {u}
-                                                </button>
-                                            )
-                                        })}
-                                    </div>
-                                    <div className="flex-1 overflow-y-auto mb-4 space-y-2 pr-2 custom-scroll">
-                                        {availableTopics.map(topic => (
-                                            <div key={topic} onClick={() => selectedTopics.includes(topic) ? setSelectedTopics(p => p.filter(x => x!==topic)) : setSelectedTopics(p => [...p, topic])}
-                                                className={`p-3 rounded-lg border cursor-pointer flex justify-between ${selectedTopics.includes(topic)?'bg-cyan-500/20 border-cyan-500 text-white':'border-white/10 text-slate-500'}`}>
-                                                {topic} {selectedTopics.includes(topic) && <i className="fa-solid fa-check"></i>}
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <div className="mb-6">
-                                        <div className="flex justify-between text-xs text-slate-400 mb-2"><span>Questions: {questionCount}</span></div>
-                                        <input type="range" min="1" max="10" value={questionCount} onChange={e => setQuestionCount(parseInt(e.target.value))} className="w-full" />
-                                    </div>
-                                    <div className="flex gap-4">
-                                        <button onClick={() => setView('setup')} className="flex-1 premium-btn py-3 rounded-xl text-slate-400">Back</button>
-                                        <button onClick={startTest} className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold py-3 rounded-xl shadow-lg">Start Test</button>
-                                    </div>
-                                </>
-                            )}
+                            <div className="space-y-2">
+                                {['Year 11','Year 12'].map(l => <button key={l} onClick={()=>setLevel(l)} className={`w-full p-3 rounded-xl border ${level===l?'border-emerald-500 bg-emerald-500/10 text-white':'border-white/10 text-slate-400'}`}>{l}</button>)}
+                            </div>
+                        </div>
+                        <div className="flex gap-4">
+                            <button onClick={()=>setView('menu')} className="flex-1 premium-btn p-3 rounded-xl text-slate-400">Back</button>
+                            <button onClick={()=>setView('topics')} className="flex-1 bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold p-3 rounded-xl shadow-lg">Next</button>
                         </div>
                     </div>
-                );
-            }
+                </div>
+            );
 
-            if (view === 'report') {
-                return <ReportCard questions={questions} timer={timer} user={user} subject={subject} level={level} onClose={() => setView('topics')} />
-            }
+            if (view === 'topics') return (
+                <div className="fixed inset-0 flex items-center justify-center p-4">
+                    {loading && <LoadingOverlay />}
+                    <div className="glass-panel p-8 rounded-3xl w-full max-w-2xl animate-fade-in flex flex-col max-h-[90vh]">
+                        <h2 className="text-2xl font-bold text-white mb-4">Topics</h2>
+                        <div className="flex gap-2 mb-4">
+                            {(level === 'Year 11' ? ['Unit 1','Unit 2','Whole Year'] : ['Unit 3','Unit 4','Whole Year']).map(u => (
+                                <button key={u} onClick={() => setSelectedUnit(u)} className={`flex-1 py-2 rounded-lg text-sm transition ${selectedUnit===u?'bg-cyan-600 text-white':'bg-white/5 text-slate-400'}`}>{u}</button>
+                            ))}
+                        </div>
+                        <div className="flex-1 overflow-y-auto mb-4 space-y-2 pr-2 custom-scroll">
+                            {availableTopics.map(t => (
+                                <div key={t} onClick={() => selectedTopics.includes(t) ? setSelectedTopics(p => p.filter(x => x!==t)) : setSelectedTopics(p => [...p, t])}
+                                    className={`p-3 rounded-lg border cursor-pointer flex justify-between ${selectedTopics.includes(t)?'bg-cyan-500/20 border-cyan-500 text-white':'border-white/10 text-slate-500'}`}>
+                                    {t} {selectedTopics.includes(t) && <i className="fa-solid fa-check"></i>}
+                                </div>
+                            ))}
+                        </div>
+                        <div className="mb-6">
+                            <div className="flex justify-between text-xs text-slate-400 mb-2"><span>Questions: {questionCount}</span></div>
+                            <input type="range" min="1" max="10" value={questionCount} onChange={e => setQuestionCount(parseInt(e.target.value))} className="w-full" />
+                        </div>
+                        <div className="flex gap-4">
+                            <button onClick={() => setView('setup')} className="flex-1 premium-btn py-3 rounded-xl text-slate-400">Back</button>
+                            <button onClick={startTest} className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold py-3 rounded-xl shadow-lg">Start Test</button>
+                        </div>
+                    </div>
+                </div>
+            );
+
+            if (view === 'report') return <ReportCard questions={questions} timer={timer} user={user} subject={subject} level={level} onClose={() => setView('topics')} />;
 
             // TEST VIEW
             return (
-                <div className="h-screen w-screen flex overflow-hidden bg-black/40 backdrop-blur-sm">
-                    <Modal isOpen={!!modalConfig} message={modalConfig?.message} confirmText={modalConfig?.confirmText} cancelText={modalConfig?.cancelText} onConfirm={modalConfig?.onConfirm} onCancel={() => setModalConfig(null)} />
+                <div className="fixed inset-0 flex overflow-hidden bg-black/40 backdrop-blur-sm">
+                    {loading && <LoadingOverlay />}
+                    <Modal isOpen={!!modalConfig} message={modalConfig?.message} confirmText={modalConfig?.confirmText} onConfirm={modalConfig?.onConfirm} onCancel={() => setModalConfig(null)} />
                     
+                    <FeedbackPanel data={currentFeedback} isOpen={showFeedback} />
+
                     {/* SIDEBAR */}
-                    <div className="w-20 glass-panel border-r border-white/5 flex flex-col items-center py-6 gap-4 z-30 pt-6">
-                        <button onClick={() => setModalConfig({ message: "Exit to topics?", confirmText: "Exit", cancelText: "Cancel", onConfirm: () => { setView('topics'); setModalConfig(null); }})} className="text-slate-400 hover:text-red-400 mb-2">
-                            <i className="fa-solid fa-arrow-left text-xl"></i>
-                        </button>
+                    <div className="w-20 glass-panel border-r border-white/5 flex flex-col items-center py-6 gap-4 pt-6 z-30">
+                        <button onClick={()=>{if(confirm("Exit?")) setView('topics')}} className="text-slate-400 hover:text-red-400 mb-2"><i className="fa-solid fa-arrow-left"></i></button>
                         <div className="w-8 h-px bg-white/10 mb-2"></div>
-                        <div className="flex-1 overflow-y-auto w-full flex flex-col items-center gap-4 py-4 custom-scroll">
-                            {questions.map((q, idx) => {
-                                let statusClass = 'bg-slate-700/50 text-slate-500';
-                                if (q.status === 'generating') statusClass = 'text-cyan-400 relative spin-border w-10 h-10';
-                                else if (q.status === 'ready') statusClass = 'bg-slate-600 text-white hover:bg-slate-500';
-                                else if (q.status === 'correct') statusClass = 'bg-emerald-600 text-white';
-                                else if (q.status === 'wrong') statusClass = 'bg-red-600 text-white';
-                                
-                                return (
-                                    <button key={idx} onClick={() => changeQuestion(idx)}
-                                        className={`w-10 h-10 rounded-full flex flex-shrink-0 items-center justify-center text-xs font-bold transition-all ${statusClass} ${currentQIndex === idx ? 'scale-110 ring-2 ring-white' : ''}`}>
-                                        {idx + 1}
-                                    </button>
-                                );
-                            })}
+                        <div className="flex-1 w-full flex flex-col items-center gap-3 overflow-y-auto custom-scroll py-4">
+                            {questions.map((q, i) => (
+                                <button key={i} onClick={()=>!isProcessing && q.status!=='generating' && changeQuestion(i)}
+                                    className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                                        q.status==='generating' ? 'text-cyan-400 spin-border' : 
+                                        q.status==='correct' ? 'bg-emerald-600 text-white' : 
+                                        q.status==='wrong' ? 'bg-red-600 text-white' : 
+                                        'bg-slate-700 text-slate-400 hover:bg-slate-600'} ${currentQIndex===i?'scale-110 ring-2 ring-white':''}`}>
+                                    {i+1}
+                                </button>
+                            ))}
                         </div>
                     </div>
 
                     {/* WORKSPACE */}
                     <div className="flex-1 flex flex-col relative">
-                        {/* Toolbar */}
-                        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-2">
+                        <div className="absolute top-4 right-4 glass-panel px-4 py-2 rounded-full text-sm font-mono z-20 flex gap-2">
+                            <span className="text-slate-400">Time:</span> <span className="text-white">{Math.floor(timer/60)}m {timer%60}s</span>
+                        </div>
+                        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
                             <div className="glass-panel rounded-full px-4 py-2 flex items-center gap-4">
                                 <button onClick={() => setWbTool('pen')} className={`${wbTool==='pen'?'text-cyan-400':'text-slate-400'}`}><i className="fa-solid fa-pen"></i></button>
                                 <button onClick={() => setWbTool('eraser')} className={`${wbTool==='eraser'?'text-pink-400':'text-slate-400'}`}><i className="fa-solid fa-eraser"></i></button>
@@ -749,61 +734,27 @@
                             </div>
                         </div>
 
-                        {/* Timer */}
-                        <div className="absolute top-4 right-4 glass-panel px-4 py-2 rounded-full text-sm font-mono flex items-center gap-2 z-20">
-                            {isQLoading ? (
-                                <>
-                                    <div className="w-3 h-3 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
-                                    <span className="text-cyan-400">{loadingTime.toFixed(1)}s</span>
-                                </>
-                            ) : (
-                                <>
-                                    <i className="fa-regular fa-clock text-slate-400"></i>
-                                    <span className="text-white">{Math.floor(timer/60)}:{(timer%60).toString().padStart(2,'0')}</span>
-                                </>
-                            )}
-                        </div>
-
-                        {/* Board */}
                         <div className="flex-1 relative cursor-crosshair flex flex-col">
-                            {!isQLoading && <Whiteboard tool={wbTool} color={wbColor} size={wbSize} triggerClear={clearBoardTrig} teacherMarks={teacherMarks} hasDrawnRef={hasDrawn} />}
+                            {!currentQ.status?.includes('generating') && <Whiteboard getCanvasRef={(ref) => canvasRef.current = ref} tool={wbTool} color={wbColor} size={wbSize} triggerClear={clearBoardTrig} teacherMarks={teacherMarks} hasDrawnRef={hasDrawn} />}
                             
-                            <div className="absolute top-20 left-10 right-10 pointer-events-none select-none flex flex-col gap-4">
-                                {isQLoading ? (
-                                    <div className="glass-panel p-6 rounded-2xl flex flex-col gap-2 max-w-lg">
-                                        <div className="text-sm font-bold text-cyan-400 uppercase tracking-widest">Generating...</div>
-                                        <div className="h-1 bg-slate-700 rounded-full w-full"><div className="h-full bg-cyan-400 animate-pulse w-2/3"></div></div>
-                                    </div>
-                                ) : (
-                                    <div className="glass-panel p-6 rounded-2xl border-l-4 border-cyan-500 animate-fade-in max-w-2xl">
-                                        <div className="text-[10px] text-cyan-400 font-bold uppercase tracking-widest mb-2">Q{currentQIndex+1} • {currentQ.topic}</div>
-                                        <MathText text={currentQ.text} />
-                                    </div>
-                                )}
+                            <div className="absolute top-20 left-10 right-10 pointer-events-none select-none">
+                                <div className="glass-panel p-6 rounded-2xl border-l-4 border-cyan-500 max-w-2xl animate-fade-in">
+                                    <div className="text-[10px] text-cyan-400 font-bold uppercase tracking-widest mb-2">Q{currentQIndex+1} • {currentQ.topic}</div>
+                                    <MathText text={currentQ.text} />
+                                </div>
                             </div>
 
-                            {/* Answer Input Area (Bottom) */}
-                            {!isQLoading && (
+                            {!currentQ.status?.includes('generating') && (
                                 <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-xl glass-panel p-2 rounded-xl flex gap-2 z-20">
-                                    <input 
-                                        type="text" 
-                                        value={userTypedAns} 
-                                        onChange={(e) => setUserTypedAns(e.target.value)} 
-                                        placeholder="Type final answer (e.g. x=5)..."
-                                        className="flex-1 bg-black/20 text-white px-4 py-3 rounded-lg focus:outline-none"
-                                        onKeyPress={(e) => e.key === 'Enter' && handleSubmitAnswer()}
-                                    />
+                                    <input value={userAns} onChange={e=>setUserAns(e.target.value)} onKeyPress={e=>e.key==='Enter'&&handleSubmit()} placeholder="Type final answer..." className="flex-1 bg-black/20 text-white px-4 py-2 rounded-lg focus:outline-none" />
                                     {isGraded ? (
                                         <button onClick={() => currentQIndex < questions.length - 1 ? changeQuestion(currentQIndex + 1) : null}
                                             disabled={currentQIndex >= questions.length - 1}
-                                            className="bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 px-6 rounded-lg shadow-lg disabled:opacity-50">
+                                            className="premium-btn bg-purple-600/50 text-white font-bold py-2 px-6 rounded-lg shadow-lg disabled:opacity-50">
                                             Next Q
                                         </button>
                                     ) : (
-                                        <button onClick={handleSubmitAnswer} disabled={isProcessing}
-                                            className="bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-2 px-6 rounded-lg shadow-lg disabled:opacity-50">
-                                            Submit
-                                        </button>
+                                        <button onClick={handleSubmit} disabled={isProcessing} className="premium-btn bg-cyan-600/50 text-white font-bold py-2 px-6 rounded-lg shadow-lg disabled:opacity-50">Submit</button>
                                     )}
                                 </div>
                             )}
@@ -811,10 +762,8 @@
                     </div>
 
                     {/* AI Sidebar */}
-                    <div className="w-80 glass-panel border-l border-white/5 flex flex-col z-30">
-                        <div className="p-4 border-b border-white/5 bg-white/5 font-bold text-white flex items-center gap-2">
-                            <i className="fa-solid fa-robot text-cyan-400"></i> Tutor
-                        </div>
+                    <div className="w-96 glass-panel border-l border-white/5 flex flex-col z-30">
+                        <div className="p-4 border-b border-white/5 font-bold text-white"><i className="fa-solid fa-robot text-cyan-400 mr-2"></i> Tutor</div>
                         <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scroll">
                             {messages.map((m, i) => (
                                 <div key={i} className={`p-3 rounded-lg text-sm border ${m.role==='user'?'ml-auto bg-cyan-900/30 border-cyan-500/30 text-cyan-100':'bg-white/5 border-white/10 text-slate-300'}`}>
@@ -824,16 +773,16 @@
                         </div>
                         <div className="p-4 border-t border-white/5 bg-black/20">
                             {allDone ? (
-                                <button onClick={() => setView('report')} className="w-full mb-3 bg-gradient-to-r from-yellow-600 to-orange-600 text-white font-bold py-3 rounded-lg shadow-lg">Finish Test</button>
+                                <button onClick={()=>setView('report')} className="w-full mb-3 bg-gradient-to-r from-yellow-600 to-orange-600 text-white font-bold py-3 rounded-lg shadow-lg">Finish Test</button>
                             ) : (
                                 <div className="grid grid-cols-2 gap-2 mb-3">
-                                    <button onClick={handleGiveUp} disabled={isQLoading || currentQ.status === 'correct' || currentQ.status === 'wrong'} className="bg-slate-700 text-slate-300 py-2 rounded-lg text-sm hover:bg-slate-600 disabled:opacity-50">Give Up</button>
-                                    <button onClick={handleMarking} disabled={isQLoading || currentQ.status === 'correct' || currentQ.status === 'wrong'} className="bg-emerald-600 text-white py-2 rounded-lg text-sm hover:bg-emerald-500 disabled:opacity-50">Evaluate</button>
+                                    <button onClick={handleGiveUp} disabled={isProcessing || isGraded} className="premium-btn bg-slate-700/50 text-slate-300 py-2 rounded-lg text-sm">Give Up</button>
+                                    <button onClick={handleEvaluate} disabled={isProcessing || isGraded} className="premium-btn bg-emerald-600/50 text-white py-2 rounded-lg text-sm">Evaluate</button>
                                 </div>
                             )}
                             <div className="flex gap-2">
-                                <input type="text" value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSendMessage()} placeholder="Ask..." className="flex-1 glass-input rounded-lg px-3 py-2 text-sm" />
-                                <button onClick={handleSendMessage} className="premium-btn px-3 rounded-lg text-cyan-400"><i className="fa-solid fa-paper-plane"></i></button>
+                                <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleChat()} placeholder="Ask..." className="flex-1 glass-input rounded-lg px-3 py-2 text-sm" />
+                                <button onClick={handleChat} className="premium-btn px-3 rounded-lg text-cyan-400"><i className="fa-solid fa-paper-plane"></i></button>
                             </div>
                         </div>
                     </div>
