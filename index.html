@@ -30,7 +30,8 @@
                         'slide-up': 'slideUp 0.5s ease-out forwards',
                         'fade-in': 'fadeIn 0.3s ease-out forwards',
                         'slide-in-right': 'slideInRight 0.3s ease-out forwards',
-                        'slide-up-reveal': 'slideUpReveal 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards'
+                        'slide-up-reveal': 'slideUpReveal 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                        'spin-slow': 'spin 3s linear infinite',
                     },
                     keyframes: {
                         slideUp: {
@@ -135,7 +136,6 @@
         const { createRoot } = ReactDOM;
         
         // --- CONSTANTS ---
-        // Fallback Priority: 2.5 Flash -> 2.5 Flash-Lite -> 2.0 Flash -> 2.0 Flash-Lite
         const GEMINI_MODELS = [
             "gemini-2.5-flash", 
             "gemini-2.5-flash-lite", 
@@ -158,16 +158,14 @@
             if (!str) return null;
             try {
                 const trimmed = str.trim();
-                // If it already looks like a key
                 if (trimmed.startsWith("AIza")) return trimmed;
-                // Attempt Base64 Decode
                 const decoded = atob(trimmed);
                 if (decoded && decoded.includes("AIza")) return decoded.trim();
                 return null;
             } catch { return null; }
         };
 
-        // Helper: Call Gemini with Model Fallback
+        // Helper: Call Gemini with Fallback
         const callGeminiAPI = async (payload, apiKey) => {
             if (!apiKey) throw new Error("Missing API Key");
             
@@ -179,12 +177,8 @@
                         body: JSON.stringify(payload)
                     });
                     
-                    if (response.status === 429) {
-                        console.warn(`Model ${model} rate limited. Falling back...`);
-                        continue;
-                    }
+                    if (response.status === 429) throw new Error("Rate limit");
                     if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
-                    
                     const data = await response.json();
                     return data;
                 } catch (e) {
@@ -192,7 +186,7 @@
                     continue; 
                 }
             }
-            throw new Error("All Gemini models unavailable. Please check your API key or connection.");
+            throw new Error("All Gemini models unavailable.");
         };
 
         const formatTime = (seconds) => {
@@ -206,20 +200,15 @@
             useEffect(() => {
                 if (!containerRef.current || !text) return;
                 containerRef.current.innerHTML = '';
-                // Robust splitter that keeps delimiters but separates math
-                const parts = text.split(/(\$[^$]+\$)/g);
-                
-                parts.forEach((part) => {
-                    if (part.startsWith('$') && part.endsWith('$')) { 
-                        // It's Math
+                const parts = text.split(/\$([^\$]+)\$/g);
+                parts.forEach((part, index) => {
+                    if (index % 2 === 1) { 
                         const span = document.createElement('span');
-                        const mathContent = part.slice(1, -1); // Remove $
                         try {
-                            katex.render(mathContent, span, { throwOnError: false, displayMode: false });
-                        } catch(e) { span.innerText = part; }
+                            katex.render(part, span, { throwOnError: false, displayMode: false });
+                        } catch(e) { span.innerText = `$${part}$`; }
                         containerRef.current.appendChild(span);
                     } else {
-                        // It's Text
                         if (part.length > 0) {
                             const span = document.createElement('span');
                             span.innerText = part;
@@ -298,18 +287,15 @@
                 return () => clearInterval(interval);
             }, [view]);
 
-            // Robust Key Loading
             useEffect(() => {
                 fetch('GE.txt')
                     .then(r => r.ok ? r.text() : Promise.reject())
                     .then(txt => {
-                        const lines = txt.split(/[\r\n]+/);
-                        let validKey = null;
+                        const lines = txt.split('\n');
                         for (const line of lines) {
-                            const k = decodeKey(line);
-                            if (k) { validKey = k; break; }
+                            const validKey = decodeKey(line);
+                            if (validKey) { setUser(u => ({ ...u, apiKey: validKey })); break; }
                         }
-                        if (validKey) setUser(u => ({ ...u, apiKey: validKey }));
                     })
                     .catch(() => console.log("No GE.txt"));
             }, []);
@@ -335,14 +321,12 @@
             };
 
             const loadSubjectContext = async () => {
-                // If NO API key -> Offline Mode
                 if (!user.apiKey) {
                     setContextStatus("offline");
                     startSession();
                     return;
                 }
 
-                // If API Key exists -> We are ONLINE/READY, even if DB is empty
                 setLoadingState({ active: true, msg: "SCANNING DATABASE...", time: 0.1 });
                 let fullText = "";
                 let pdfIndex = 1;
@@ -366,19 +350,19 @@
                             failCount = 0; pdfIndex++;
                         } catch (e) { failCount++; pdfIndex++; }
                     }
-                } catch (e) { console.error("RAG Error", e); } finally {
-                    // ALWAYS enable ready status if API key exists, even if PDF scan fails
-                    setContextData(fullText.substring(0, 15000));
-                    setContextStatus("ready");
-                    setLoadingState({ active: false, msg: "", time: 0 });
-                    startSession();
-                }
+                } catch (e) { console.error("RAG Error", e); }
+
+                setContextData(fullText.substring(0, 15000));
+                setContextStatus(foundAny ? "ready" : "missing");
+                setLoadingState({ active: false, msg: "", time: 0 });
+                startSession();
             };
 
             const generateQuestion = async (indexOverride) => {
                 if (generationPaused.current) return;
                 setGenerating(true);
 
+                // Helper to update specific index
                 const updateQ = (idx, qData) => {
                     setQuestions(prev => {
                         const newQs = [...prev];
@@ -387,6 +371,7 @@
                     });
                 };
 
+                // If initializing (first 2 questions)
                 if (questions.length === 0) {
                     const placeholders = Array(config.count).fill({ status: 'generating', text: 'Generating...', topic: 'Loading' });
                     setQuestions(placeholders);
@@ -394,6 +379,7 @@
                     const timer = setInterval(() => setLoadingState(p => ({...p, time: p.time + 0.1})), 100);
                     setLoadingState({ active: true, msg: "INITIALIZING SESSION...", time: 0 });
 
+                    // Generate Q1
                     let q1;
                     if (!user.apiKey) q1 = generateOfflineQuestion(config.subject);
                     else {
@@ -402,6 +388,7 @@
                     }
                     updateQ(0, q1);
 
+                    // Generate Q2 immediately if count > 1
                     if (config.count > 1) {
                         let q2;
                         if (!user.apiKey) q2 = generateOfflineQuestion(config.subject);
@@ -412,6 +399,7 @@
                         updateQ(1, q2);
                     }
 
+                    // Prepare Greeting
                     let msgs = [{ role: 'ai', text: `Hello ${user.name}, good luck with your ${config.subject} session!` }];
                     if (config.extraPrompt) msgs.push({ role: 'ai', text: "I've noted your extra instructions." });
                     if (config.customMaterials) msgs.push({ role: 'ai', text: "I've analyzed your uploaded materials and will reference them." });
@@ -424,6 +412,8 @@
                     return;
                 }
 
+                // Background Generation for Q3 onwards
+                // Find next generating index
                 const nextIdx = questions.findIndex(q => q.status === 'generating');
                 if (nextIdx !== -1) {
                     if (!user.apiKey) {
@@ -454,8 +444,8 @@
                 const systemPrompt = `You are a strict teacher for Australian ATAR ${config.subject}. 
                 CONTEXT: ${contextData}
                 ${materialContext}
-                TASK: Generate 1 unique, complex, multi-step challenging question involving synthesis of multiple concepts (e.g. Calculus + Trig). ${focus}. ${extra}
-                RULES: Output strictly valid JSON. NO multiple choice. NO sub-questions. ALWAYS wrap math expressions in single $ signs (e.g. $x^2$). Allocate marks (between 4 and 7) based on difficulty. 
+                TASK: Generate 1 unique, challenging question. ${focus}. ${extra}
+                RULES: Output strictly valid JSON. NO multiple choice. NO sub-questions. ALWAYS wrap math expressions in single $ signs (e.g. $x^2$). Allocate marks (between 2 and 6) based on difficulty. 
                 FORMAT: { "text": "Question text with math in $...$", "topic": "string", "answer": "Answer with math in $...$", "hint": "Hint string", "marks": number }`;
                 
                 const payload = { contents: [{ parts: [{ text: systemPrompt }] }], generationConfig: { responseMimeType: "application/json" } };
@@ -463,6 +453,7 @@
                 return JSON.parse(data.candidates[0].content.parts[0].text);
             };
 
+            // Loop to fill queue
             useEffect(() => {
                 if (view === "ARENA" && !generating) {
                     const pending = questions.filter(q => q.status === 'generating').length;
@@ -481,7 +472,7 @@
 
             const startSession = () => {
                 setTimer(0);
-                generateQuestion();
+                generateQuestion(); // Triggers the init sequence
             };
 
             return (
@@ -521,8 +512,9 @@
                                     <span className="text-slate-500 font-mono text-xs font-bold bg-white/5 px-3 py-1 rounded-full">{user.name}</span>
                                 </div>
                                 
+                                {/* 3 Column Layout */}
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-4 overflow-y-auto custom-scrollbar pr-2">
-                                    {/* Col 1 */}
+                                    {/* Col 1: Basic */}
                                     <div className="space-y-6">
                                         <h3 className="text-[10px] text-blue-400 font-bold uppercase tracking-widest border-b border-white/10 pb-2">Core Settings</h3>
                                         <div className="custom-select-wrapper">
@@ -543,7 +535,7 @@
                                         </div>
                                     </div>
 
-                                    {/* Col 2 */}
+                                    {/* Col 2: Topics */}
                                     <div className="flex flex-col h-full">
                                         <h3 className="text-[10px] text-blue-400 font-bold uppercase tracking-widest border-b border-white/10 pb-2 mb-4">Focus</h3>
                                         <div className="bg-black/20 rounded-xl p-1 border border-white/5 flex mb-4">
@@ -571,7 +563,7 @@
                                         )}
                                     </div>
 
-                                    {/* Col 3 */}
+                                    {/* Col 3: Customization */}
                                     <div className="space-y-4">
                                         <h3 className="text-[10px] text-blue-400 font-bold uppercase tracking-widest border-b border-white/10 pb-2">Customization</h3>
                                         <div>
@@ -605,7 +597,6 @@
 
                     {view === "ARENA" && questions.length > 0 && (
                         <Arena 
-                            key={currentQIndex} /* Forces reset of canvas and state on question change */
                             question={questions[currentQIndex]}
                             questions={questions} 
                             qIndex={currentQIndex}
@@ -686,7 +677,7 @@
                 initCanvas();
                 window.addEventListener('resize', initCanvas);
                 return () => window.removeEventListener('resize', initCanvas);
-            }, []); // Empty deps because parent key change re-mounts component
+            }, [qIndex]); 
 
             useEffect(() => {
                 if(ctxRef.current) {
