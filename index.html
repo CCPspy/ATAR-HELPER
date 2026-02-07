@@ -86,6 +86,7 @@
         .custom-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
         
         /* Loaders */
+        .loader-ring { display: inline-block; position: relative; width: 80px; height: 80px; }
         .loader-ring div {
             box-sizing: border-box; display: block; position: absolute; width: 64px; height: 64px; margin: 8px;
             border: 4px solid #22d3ee; border-radius: 50%; animation: loader-ring 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
@@ -211,7 +212,7 @@
                 // CRITICAL: Stop here if no keys to prevent console spam
                 if (keysToUse.length === 0) throw new Error("NO_API_KEY");
 
-                // Updated Model List to match Official Documentation
+                // Updated Model List to match Official Documentation Fallback Strategy
                 const models = [
                     "gemini-2.5-flash", 
                     "gemini-2.5-flash-lite", 
@@ -310,53 +311,39 @@
             </div>
         );
 
-        // 2. Whiteboard
+        // 2. Whiteboard (Reverted to Simple Canvas)
         const Whiteboard = memo(({ tool, color, size, triggerClear, teacherMarks, getCanvasRef, savedBoard }) => {
             const canvasRef = useRef(null);
             const ctxRef = useRef(null);
-            const containerRef = useRef(null);
             const [isDrawing, setIsDrawing] = useState(false);
-            const [heightMul, setHeightMul] = useState(1); // 1x, 2x, 3x
 
             useEffect(() => {
                 if(getCanvasRef) getCanvasRef(canvasRef);
                 const canvas = canvasRef.current;
                 
                 // Initialize or Resize
-                const initCanvas = () => {
-                    if (!containerRef.current) return;
-                    const rect = containerRef.current.getBoundingClientRect();
-                    // If heightMul changes, we want to expand height, but keep width matched to container
-                    // Note: This logic runs on mount and resize.
-                    // For expansion, we handle explicit data preservation in handleExpand.
-                    // This is just initial setup or window resize.
-                    if (canvas.width === 0) {
-                        canvas.width = rect.width;
-                        canvas.height = rect.height * heightMul;
-                    }
+                const resize = () => {
+                    const rect = canvas.getBoundingClientRect();
+                    canvas.width = rect.width;
+                    canvas.height = rect.height;
                     const ctx = canvas.getContext('2d');
                     ctx.lineCap = "round"; ctx.lineJoin = "round";
                     ctxRef.current = ctx;
-                };
-                
-                initCanvas();
-                
-                const handleResize = () => {
-                    // On window resize, we might want to resize canvas but that clears it. 
-                    // For simplicity, we just update context refs, but ideally we'd redraw.
-                    if (containerRef.current && canvasRef.current) {
-                         const rect = containerRef.current.getBoundingClientRect();
-                         // Only resize width to match container, keep height based on multiplier
-                         // This is complex to do without losing data, so we'll skip auto-resize for now
-                         // or rely on CSS scaling.
+                    
+                    // Re-draw saved content if exists (handle resize loss)
+                    if(savedBoard) {
+                        const img = new Image();
+                        img.onload = () => ctx.drawImage(img, 0, 0, rect.width, rect.height);
+                        img.src = savedBoard;
                     }
                 };
+                
+                resize();
+                window.addEventListener('resize', resize);
+                return () => window.removeEventListener('resize', resize);
+            }, [savedBoard]); // Re-run when savedBoard changes to load new question data
 
-                window.addEventListener('resize', handleResize);
-                return () => window.removeEventListener('resize', handleResize);
-            }, []);
-
-            // Restore Saved Board
+            // Restore Saved Board specifically when prop changes
             useEffect(() => {
                 const ctx = ctxRef.current;
                 const canvas = canvasRef.current;
@@ -364,20 +351,11 @@
 
                 // Always start clean when switching questions
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-                setHeightMul(1); // Reset expansion on new question? Yes, usually.
-                canvas.height = containerRef.current.getBoundingClientRect().height; // Reset height to 1x
 
                 if (savedBoard) {
                     const img = new Image();
                     img.onload = () => {
-                        // If saved board is larger, expand to fit
-                        if (img.height > canvas.height) {
-                            const newMul = Math.ceil(img.height / containerRef.current.getBoundingClientRect().height);
-                            setHeightMul(Math.min(newMul, 3));
-                            canvas.height = containerRef.current.getBoundingClientRect().height * Math.min(newMul, 3);
-                            ctx.lineCap = "round"; ctx.lineJoin = "round"; // Context resets on resize
-                        }
-                        ctx.drawImage(img, 0, 0);
+                        ctx.drawImage(img, 0, 0); // Draw at 0,0 natural size
                     };
                     img.src = savedBoard;
                 }
@@ -396,10 +374,8 @@
                     teacherMarks.forEach((m) => {
                         ctx.strokeStyle = m.type === 'tick' ? '#10b981' : '#ef4444';
                         ctx.lineWidth = 4; ctx.beginPath();
-                        // Draw marks relative to current view? Or absolute?
-                        // Marks are usually centered.
-                        const cx = containerRef.current.getBoundingClientRect().width / 2;
-                        const cy = containerRef.current.getBoundingClientRect().height / 2; // Center of *viewport* roughly
+                        const cx = canvasRef.current.width / 2;
+                        const cy = canvasRef.current.height / 2;
                         if(m.type === 'tick') { ctx.moveTo(cx-20, cy); ctx.lineTo(cx-5, cy+20); ctx.lineTo(cx+30, cy-30); }
                         else { ctx.moveTo(cx-20, cy-20); ctx.lineTo(cx+20, cy+20); ctx.moveTo(cx+20, cy-20); ctx.lineTo(cx-20, cy+20); }
                         ctx.stroke();
@@ -408,64 +384,15 @@
                 }
             }, [teacherMarks]);
 
-            // Expand Logic
-            const handleExpand = () => {
-                if (heightMul >= 3 || !canvasRef.current || !ctxRef.current) return;
-                
-                const canvas = canvasRef.current;
-                const ctx = ctxRef.current;
-                
-                // Save current content
-                const savedContent = canvas.toDataURL();
-                
-                // Increase Multiplier
-                const newMul = heightMul + 1;
-                setHeightMul(newMul);
-                
-                // Resize Canvas
-                const baseHeight = containerRef.current.getBoundingClientRect().height;
-                canvas.height = baseHeight * newMul;
-                
-                // Restore Context Props (lost on resize)
-                ctx.lineCap = "round"; ctx.lineJoin = "round";
-                
-                // Restore Content
-                const img = new Image();
-                img.onload = () => {
-                    ctx.drawImage(img, 0, 0);
-                };
-                img.src = savedContent;
-            };
-
-            // Custom Scroll Logic
-            const handleScrollDrag = (e) => {
-                if (!containerRef.current) return;
-                const container = containerRef.current;
-                const rect = e.target.parentElement.getBoundingClientRect();
-                const offsetY = e.touches ? e.touches[0].clientY : e.clientY;
-                const relativeY = offsetY - rect.top;
-                
-                // Map bar position to scroll position
-                // Bar height is roughly 100%. relativeY / rect.height is percentage.
-                // ScrollTop max is scrollHeight - clientHeight.
-                const ratio = Math.max(0, Math.min(1, relativeY / rect.height));
-                container.scrollTop = ratio * (container.scrollHeight - container.clientHeight);
-            };
-
             // Precise Cursor Tracking
             const getPos = (e) => {
-                // Use offsetX/Y for mouse events for better precision
                 if (e.nativeEvent && typeof e.nativeEvent.offsetX === 'number') {
                     return { x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY };
                 }
-                // Fallback for touch
                 const rect = canvasRef.current.getBoundingClientRect();
                 const clientX = e.touches ? e.touches[0].clientX : e.clientX;
                 const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                return {
-                    x: clientX - rect.left,
-                    y: clientY - rect.top
-                };
+                return { x: clientX - rect.left, y: clientY - rect.top };
             };
 
             const start = (e) => {
@@ -486,42 +413,12 @@
             };
 
             return (
-                <div className="relative w-full h-full group">
-                    <div ref={containerRef} className="w-full h-full overflow-y-auto overflow-x-hidden touch-pan-y relative custom-scroll">
-                        <canvas 
-                            ref={canvasRef} 
-                            onMouseDown={start} onMouseMove={move} onMouseUp={()=>setIsDrawing(false)} onMouseLeave={()=>setIsDrawing(false)} 
-                            onTouchStart={start} onTouchMove={move} onTouchEnd={()=>setIsDrawing(false)} 
-                            className="w-full block cursor-crosshair touch-none"
-                            style={{ height: `${heightMul * 100}%` }}
-                        />
-                    </div>
-                    
-                    {/* Expand Button */}
-                    {heightMul < 3 && (
-                        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 opacity-50 hover:opacity-100 transition-opacity">
-                            <button onClick={handleExpand} className="bg-slate-800/80 border border-white/20 text-white px-4 py-1 rounded-full text-xs font-bold flex items-center gap-2 backdrop-blur">
-                                <i className="fa-solid fa-arrow-down"></i> EXTEND BOARD
-                            </button>
-                        </div>
-                    )}
-
-                    {/* Touch Scroll Slider (Visible when expanded) */}
-                    {heightMul > 1 && (
-                        <div className="absolute right-2 top-4 bottom-20 w-6 bg-slate-900/30 rounded-full border border-white/5 flex items-center justify-center z-20 touch-none">
-                            <div 
-                                className="w-4 h-12 bg-white/20 rounded-full cursor-grab active:bg-cyan-500/50"
-                                onTouchMove={handleScrollDrag}
-                                onMouseDown={(e) => {
-                                    const moveHandler = (ev) => handleScrollDrag(ev);
-                                    const upHandler = () => { window.removeEventListener('mousemove', moveHandler); window.removeEventListener('mouseup', upHandler); };
-                                    window.addEventListener('mousemove', moveHandler);
-                                    window.addEventListener('mouseup', upHandler);
-                                }}
-                            ></div>
-                        </div>
-                    )}
-                </div>
+                <canvas 
+                    ref={canvasRef} 
+                    onMouseDown={start} onMouseMove={move} onMouseUp={()=>setIsDrawing(false)} onMouseLeave={()=>setIsDrawing(false)} 
+                    onTouchStart={start} onTouchMove={move} onTouchEnd={()=>setIsDrawing(false)} 
+                    className="w-full h-full cursor-crosshair touch-none"
+                />
             );
         });
 
