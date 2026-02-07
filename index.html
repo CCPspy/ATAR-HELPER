@@ -354,23 +354,32 @@
                 }
             }, [teacherMarks]);
 
-            const start = (e) => {
+            // Precise Cursor Tracking
+            const getPos = (e) => {
                 const rect = canvasRef.current.getBoundingClientRect();
-                const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-                const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
-                ctxRef.current.beginPath(); ctxRef.current.moveTo(x,y);
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return {
+                    x: clientX - rect.left,
+                    y: clientY - rect.top
+                };
+            };
+
+            const start = (e) => {
+                const {x, y} = getPos(e);
+                ctxRef.current.beginPath(); 
+                ctxRef.current.moveTo(x, y);
                 setIsDrawing(true);
             };
 
             const move = (e) => {
                 if(!isDrawing) return;
-                const rect = canvasRef.current.getBoundingClientRect();
-                const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-                const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+                const {x, y} = getPos(e);
                 const ctx = ctxRef.current;
                 if(tool==='eraser') { ctx.globalCompositeOperation = 'destination-out'; ctx.lineWidth = size*10; }
                 else { ctx.globalCompositeOperation = 'source-over'; ctx.lineWidth = size; ctx.strokeStyle = color; }
-                ctx.lineTo(x,y); ctx.stroke();
+                ctx.lineTo(x, y); 
+                ctx.stroke();
             };
 
             return <canvas ref={canvasRef} onMouseDown={start} onMouseMove={move} onMouseUp={()=>setIsDrawing(false)} onMouseLeave={()=>setIsDrawing(false)} onTouchStart={start} onTouchMove={move} onTouchEnd={()=>setIsDrawing(false)} className="w-full h-full cursor-crosshair touch-none" />;
@@ -643,7 +652,7 @@
 
                         {/* Footer Action */}
                         <button onClick={onStart} className="h-16 w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold tracking-widest text-sm transition-colors flex items-center justify-center gap-3">
-                            <span>START SIMULATION</span>
+                            <span>START TEST</span>
                             <i className="fa-solid fa-arrow-right"></i>
                         </button>
                     </div>
@@ -671,6 +680,7 @@
 
             const q = questions[currentQIndex] || {};
             const isGraded = q.status === 'correct' || q.status === 'wrong';
+            const isLastQ = currentQIndex === questions.length - 1;
 
             // Auto switch to results when graded
             useEffect(() => {
@@ -755,9 +765,6 @@
                                 onConfirm: handleQuitConfirm
                             })} className="text-slate-500 hover:text-red-400 transition-colors" title="Exit">
                                 <i className="fa-solid fa-right-from-bracket"></i>
-                            </button>
-                            <button onClick={onFinish} className="text-slate-500 hover:text-white transition-colors" title="Finish & Report">
-                                <i className="fa-solid fa-flag-checkered"></i>
                             </button>
                         </div>
                     </div>
@@ -851,9 +858,15 @@
                                         </button>
                                     </>
                                 ) : (
-                                    <button onClick={()=>setCurrentQIndex(p => Math.min(questions.length-1, p+1))} className="w-full py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg flex items-center justify-center gap-2">
-                                        NEXT QUESTION <i className="fa-solid fa-forward"></i>
-                                    </button>
+                                    isLastQ ? (
+                                        <button onClick={onFinish} className="w-full py-3 bg-gradient-to-r from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 text-white font-bold rounded-lg flex items-center justify-center gap-2 shadow-lg">
+                                            FINISH TEST <i className="fa-solid fa-flag-checkered"></i>
+                                        </button>
+                                    ) : (
+                                        <button onClick={()=>setCurrentQIndex(p => Math.min(questions.length-1, p+1))} className="w-full py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg flex items-center justify-center gap-2">
+                                            NEXT QUESTION <i className="fa-solid fa-forward"></i>
+                                        </button>
+                                    )
                                 )}
                             </div>
                         </div>
@@ -910,9 +923,13 @@
                                                         <div className="text-xs font-bold text-emerald-400 mb-2 uppercase tracking-wide"><i className="fa-solid fa-thumbs-up mr-2"></i>Positives</div>
                                                         <div className="text-sm text-slate-300 leading-relaxed"><MathText text={q.feedback.positives || "N/A"} /></div>
                                                     </div>
-                                                    <div className="bg-slate-900/50 rounded-xl p-4 border border-white/5">
+                                                    <div className="bg-slate-900/50 rounded-xl p-4 border border-white/5 mb-3">
                                                         <div className="text-xs font-bold text-amber-400 mb-2 uppercase tracking-wide"><i className="fa-solid fa-lightbulb mr-2"></i>Improvements</div>
                                                         <div className="text-sm text-slate-300 leading-relaxed"><MathText text={q.feedback.improvements || "N/A"} /></div>
+                                                    </div>
+                                                    <div className="bg-blue-900/20 rounded-xl p-4 border border-blue-500/30">
+                                                         <div className="text-xs font-bold text-blue-400 mb-2 uppercase tracking-wide"><i className="fa-solid fa-magnifying-glass mr-2"></i>Working Comment</div>
+                                                         <div className="text-sm text-slate-300 leading-relaxed"><MathText text={q.feedback.working_comment || "No specific comments on working."} /></div>
                                                     </div>
                                                 </>
                                             )}
@@ -950,36 +967,64 @@
         };
 
         // Layer 4: Debrief
-        const Debrief = ({ questions, timer, onRestart }) => {
+        const Debrief = ({ questions, timer, user, subject, level, onRestart }) => {
             const score = questions.reduce((acc, q) => acc + (q.userMark || 0), 0);
             const total = questions.reduce((acc, q) => acc + (q.maxMarks || 3), 0);
             const percentage = Math.round((score / total) * 100) || 0;
+            const verdict = percentage > 80 ? "Excellent" : percentage > 50 ? "Satisfactory" : "Review Needed";
 
             const downloadPDF = () => {
                 const { jsPDF } = window.jspdf;
                 const doc = new jsPDF();
+                const now = new Date().toLocaleDateString();
+
                 doc.setFont("helvetica", "bold"); doc.setFontSize(22);
                 doc.text("ATAR HELPER SESSION REPORT", 105, 20, null, null, "center");
-                doc.setFontSize(12); doc.setFont("helvetica", "normal");
-                doc.text(`Score: ${score}/${total} (${percentage}%)`, 20, 40);
-                doc.text(`Duration: ${Math.floor(timer/60)}m ${timer%60}s`, 20, 50);
+                doc.setFontSize(10); doc.setFont("helvetica", "normal");
+                doc.text(`Generated: ${now}`, 105, 28, null, null, "center");
+
+                doc.setLineWidth(0.5); doc.line(20, 35, 190, 35);
+
+                doc.setFont("helvetica", "bold"); doc.setFontSize(12);
+                doc.text(`Student: ${user}`, 20, 45);
+                doc.text(`Subject: ${subject} (${level})`, 20, 52);
                 
-                let y = 70;
+                doc.text(`Final Score: ${score}/${total} (${percentage}%)`, 140, 45);
+                doc.text(`Time Taken: ${Math.floor(timer/60)}m ${timer%60}s`, 140, 52);
+                doc.text(`Verdict: ${verdict}`, 140, 59);
+
+                doc.setFontSize(14);
+                doc.text("Question Breakdown", 20, 70);
+
+                let y = 80;
                 questions.forEach((q, i) => {
-                    if (y > 270) { doc.addPage(); y = 20; }
-                    doc.setFont("helvetica", "bold");
-                    doc.text(`Q${i+1}: ${q.topic}`, 20, y);
-                    y+=7;
-                    doc.setFont("helvetica", "normal");
+                    if (y > 250) { doc.addPage(); y = 20; }
+                    
+                    doc.setFont("helvetica", "bold"); doc.setFontSize(11);
+                    doc.text(`Q${i+1} [${q.topic}]`, 20, y);
+                    doc.text(`${q.userMark || 0}/${q.maxMarks || 3} Marks`, 170, y, null, null, "right");
+                    y += 6;
+
+                    doc.setFont("helvetica", "normal"); doc.setFontSize(10);
                     const qText = doc.splitTextToSize(q.text.replace(/\$/g, ''), 170);
                     doc.text(qText, 20, y);
-                    y += (qText.length * 5) + 5;
-                    doc.setTextColor(100);
-                    doc.text(`Feedback: ${q.feedback?.improvements || 'N/A'}`, 20, y);
+                    y += (qText.length * 5) + 4;
+
+                    doc.setFont("helvetica", "italic"); doc.setTextColor(80);
+                    const feedback = q.feedback?.working_comment 
+                        ? `Working: ${q.feedback.working_comment}. Improvement: ${q.feedback.improvements}` 
+                        : "Feedback: Not detailed.";
+                    const fbText = doc.splitTextToSize(feedback, 170);
+                    doc.text(fbText, 20, y);
                     doc.setTextColor(0);
-                    y += 20;
+                    
+                    y += (fbText.length * 5) + 10;
                 });
-                doc.save("Session_Report.pdf");
+                
+                doc.setFont("helvetica", "bold");
+                doc.text("End of Report", 105, 285, null, null, "center");
+                
+                doc.save(`ATAR_Helper_${user}_${now.replace(/\//g,'-')}.pdf`);
             };
 
             return (
@@ -1061,6 +1106,7 @@
             
             const startSession = async () => {
                 setLoading(true);
+                setCurrentQIndex(0); // Ensure start at first Q
                 // Load Context
                 await AI_ENGINE.loadContext(config.subject, config.level, config.customFiles);
                 
@@ -1126,13 +1172,31 @@
                 }
 
                 try {
-                    const prompt = `Role: Teacher. Grade this. 
-                    Q: ${q.text}. 
-                    Correct Ans: ${q.answer}. 
-                    Student Ans: ${userAns}. 
-                    Max Marks: ${q.marks}.
-                    Check image for working out if possible.
-                    Output JSON: { "mark": number, "correct": boolean, "feedback": { "positives": "", "improvements": "" } }`;
+                    const prompt = `Role: Senior Math Teacher. Grade this submission.
+                    Context: ATAR ${config.subject} ${config.level}.
+                    Question: ${q.text}
+                    Correct Answer: ${q.answer}
+                    Student Answer: ${userAns}
+                    Max Marks: ${q.marks}
+                    
+                    Rubric:
+                    1. Answer Only (empty whiteboard) = Max 1 mark (unless it's a 1-mark Q).
+                    2. Correct Working + Correct Answer = Full Marks.
+                    3. Flawed Working + Correct Answer = Deduct marks.
+                    4. Correct Working + Wrong Answer = Partial marks.
+                    
+                    Check the attached whiteboard image for working out.
+                    
+                    Output JSON:
+                    {
+                        "mark": number,
+                        "correct": boolean,
+                        "feedback": {
+                            "positives": "What they did right",
+                            "improvements": "Specific errors",
+                            "working_comment": "Comment specifically on their working out logic"
+                        }
+                    }`;
 
                     const resTxt = await AI_ENGINE.callGemini(prompt, imgData, true);
                     const result = JSON.parse(resTxt);
@@ -1184,10 +1248,14 @@
                     }
                     if(!imgData) throw new Error("No board data");
 
-                    const prompt = `Analyze the student's working for Q: ${questions[currentQIndex].text}. Give a brief hint.`;
-                    const hint = await AI_ENGINE.callGemini(prompt, imgData, false);
+                    const prompt = `Analyze the student's working for Q: ${questions[currentQIndex].text}. 
+                    Output JSON: { "observed": "What steps are written?", "errors": "Any logic flaws?", "hint": "Next step hint" }`;
+                    const resTxt = await AI_ENGINE.callGemini(prompt, imgData, true);
+                    const res = JSON.parse(resTxt);
                     
-                    setMessages(p => { const n = [...p]; n.pop(); return [...n, { role: 'ai', text: hint }]; });
+                    const formatted = `Observed: ${res.observed}\nErrors: ${res.errors}\nHint: ${res.hint}`;
+                    
+                    setMessages(p => { const n = [...p]; n.pop(); return [...n, { role: 'ai', text: formatted }]; });
                 } catch(e) {
                     const msg = e.message === "NO_API_KEY" ? "Offline Mode: AI features unavailable without API Key." : "Canvas empty or error.";
                     setMessages(p => { const n = [...p]; n.pop(); return [...n, { role: 'ai', text: msg }]; });
@@ -1213,8 +1281,8 @@
 
             const changeQuestion = (idx) => {
                 setCurrentQIndex(idx);
-                setTeacherMarks([]);
-                setTriggerClear(p => p+1);
+                setTeacherMarks([]); // Remove ticks
+                setTriggerClear(p => p+1); // Clear board
                 setUserAns("");
             };
 
@@ -1247,13 +1315,19 @@
                         />
                     )}
 
-                    {view === 'debrief' && <Debrief questions={questions} timer={timer} onRestart={() => window.location.reload()} />}
+                    {view === 'debrief' && (
+                        <Debrief 
+                            questions={questions} timer={timer} 
+                            user={user} subject={config.subject} level={config.level}
+                            onRestart={() => window.location.reload()} 
+                        />
+                    )}
 
                     {loading && (
-                        <div className="fixed inset-0 bg-black/90 z-50 flex flex-col items-center justify-center fade-in">
-                            <div className="loader-ring mb-4"><div></div><div></div><div></div></div>
-                            <div className="text-xl font-bold text-white tracking-widest animate-pulse">INITIALIZING SESSION</div>
-                            <div className="text-cyan-500 font-mono mt-2">Generating initial vector set...</div>
+                        <div className="fixed inset-0 bg-black/95 z-[100] flex flex-col items-center justify-center fade-in">
+                            <div className="loader-ring mb-8"><div></div><div></div><div></div></div>
+                            <div className="text-xl font-bold text-white tracking-[0.2em] animate-pulse">INITIALIZING SESSION</div>
+                            <div className="text-cyan-500 font-mono mt-4 text-xs">Vectorizing Curriculum Context...</div>
                         </div>
                     )}
                     
