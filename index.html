@@ -311,25 +311,77 @@
         );
 
         // 2. Whiteboard
-        const Whiteboard = memo(({ tool, color, size, triggerClear, teacherMarks, getCanvasRef }) => {
+        const Whiteboard = memo(({ tool, color, size, triggerClear, teacherMarks, getCanvasRef, savedBoard }) => {
             const canvasRef = useRef(null);
             const ctxRef = useRef(null);
+            const containerRef = useRef(null);
             const [isDrawing, setIsDrawing] = useState(false);
+            const [heightMul, setHeightMul] = useState(1); // 1x, 2x, 3x
 
             useEffect(() => {
                 if(getCanvasRef) getCanvasRef(canvasRef);
                 const canvas = canvasRef.current;
-                const resize = () => {
-                    const rect = canvas.getBoundingClientRect();
-                    canvas.width = rect.width; canvas.height = rect.height;
+                
+                // Initialize or Resize
+                const initCanvas = () => {
+                    if (!containerRef.current) return;
+                    const rect = containerRef.current.getBoundingClientRect();
+                    // If heightMul changes, we want to expand height, but keep width matched to container
+                    // Note: This logic runs on mount and resize.
+                    // For expansion, we handle explicit data preservation in handleExpand.
+                    // This is just initial setup or window resize.
+                    if (canvas.width === 0) {
+                        canvas.width = rect.width;
+                        canvas.height = rect.height * heightMul;
+                    }
                     const ctx = canvas.getContext('2d');
                     ctx.lineCap = "round"; ctx.lineJoin = "round";
                     ctxRef.current = ctx;
                 };
-                resize();
-                window.addEventListener('resize', resize);
-                return () => window.removeEventListener('resize', resize);
+                
+                initCanvas();
+                
+                const handleResize = () => {
+                    // On window resize, we might want to resize canvas but that clears it. 
+                    // For simplicity, we just update context refs, but ideally we'd redraw.
+                    if (containerRef.current && canvasRef.current) {
+                         const rect = containerRef.current.getBoundingClientRect();
+                         // Only resize width to match container, keep height based on multiplier
+                         // This is complex to do without losing data, so we'll skip auto-resize for now
+                         // or rely on CSS scaling.
+                    }
+                };
+
+                window.addEventListener('resize', handleResize);
+                return () => window.removeEventListener('resize', handleResize);
             }, []);
+
+            // Restore Saved Board
+            useEffect(() => {
+                const ctx = ctxRef.current;
+                const canvas = canvasRef.current;
+                if (!ctx || !canvas) return;
+
+                // Always start clean when switching questions
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                setHeightMul(1); // Reset expansion on new question? Yes, usually.
+                canvas.height = containerRef.current.getBoundingClientRect().height; // Reset height to 1x
+
+                if (savedBoard) {
+                    const img = new Image();
+                    img.onload = () => {
+                        // If saved board is larger, expand to fit
+                        if (img.height > canvas.height) {
+                            const newMul = Math.ceil(img.height / containerRef.current.getBoundingClientRect().height);
+                            setHeightMul(Math.min(newMul, 3));
+                            canvas.height = containerRef.current.getBoundingClientRect().height * Math.min(newMul, 3);
+                            ctx.lineCap = "round"; ctx.lineJoin = "round"; // Context resets on resize
+                        }
+                        ctx.drawImage(img, 0, 0);
+                    };
+                    img.src = savedBoard;
+                }
+            }, [savedBoard]);
 
             useEffect(() => {
                 if (triggerClear > 0 && ctxRef.current) {
@@ -344,8 +396,10 @@
                     teacherMarks.forEach((m) => {
                         ctx.strokeStyle = m.type === 'tick' ? '#10b981' : '#ef4444';
                         ctx.lineWidth = 4; ctx.beginPath();
-                        const cx = canvasRef.current.width / 2;
-                        const cy = canvasRef.current.height / 2;
+                        // Draw marks relative to current view? Or absolute?
+                        // Marks are usually centered.
+                        const cx = containerRef.current.getBoundingClientRect().width / 2;
+                        const cy = containerRef.current.getBoundingClientRect().height / 2; // Center of *viewport* roughly
                         if(m.type === 'tick') { ctx.moveTo(cx-20, cy); ctx.lineTo(cx-5, cy+20); ctx.lineTo(cx+30, cy-30); }
                         else { ctx.moveTo(cx-20, cy-20); ctx.lineTo(cx+20, cy+20); ctx.moveTo(cx+20, cy-20); ctx.lineTo(cx-20, cy+20); }
                         ctx.stroke();
@@ -353,6 +407,50 @@
                     ctx.restore();
                 }
             }, [teacherMarks]);
+
+            // Expand Logic
+            const handleExpand = () => {
+                if (heightMul >= 3 || !canvasRef.current || !ctxRef.current) return;
+                
+                const canvas = canvasRef.current;
+                const ctx = ctxRef.current;
+                
+                // Save current content
+                const savedContent = canvas.toDataURL();
+                
+                // Increase Multiplier
+                const newMul = heightMul + 1;
+                setHeightMul(newMul);
+                
+                // Resize Canvas
+                const baseHeight = containerRef.current.getBoundingClientRect().height;
+                canvas.height = baseHeight * newMul;
+                
+                // Restore Context Props (lost on resize)
+                ctx.lineCap = "round"; ctx.lineJoin = "round";
+                
+                // Restore Content
+                const img = new Image();
+                img.onload = () => {
+                    ctx.drawImage(img, 0, 0);
+                };
+                img.src = savedContent;
+            };
+
+            // Custom Scroll Logic
+            const handleScrollDrag = (e) => {
+                if (!containerRef.current) return;
+                const container = containerRef.current;
+                const rect = e.target.parentElement.getBoundingClientRect();
+                const offsetY = e.touches ? e.touches[0].clientY : e.clientY;
+                const relativeY = offsetY - rect.top;
+                
+                // Map bar position to scroll position
+                // Bar height is roughly 100%. relativeY / rect.height is percentage.
+                // ScrollTop max is scrollHeight - clientHeight.
+                const ratio = Math.max(0, Math.min(1, relativeY / rect.height));
+                container.scrollTop = ratio * (container.scrollHeight - container.clientHeight);
+            };
 
             // Precise Cursor Tracking
             const getPos = (e) => {
@@ -387,7 +485,44 @@
                 ctx.stroke();
             };
 
-            return <canvas ref={canvasRef} onMouseDown={start} onMouseMove={move} onMouseUp={()=>setIsDrawing(false)} onMouseLeave={()=>setIsDrawing(false)} onTouchStart={start} onTouchMove={move} onTouchEnd={()=>setIsDrawing(false)} className="w-full h-full cursor-crosshair touch-none" />;
+            return (
+                <div className="relative w-full h-full group">
+                    <div ref={containerRef} className="w-full h-full overflow-y-auto overflow-x-hidden touch-pan-y relative custom-scroll">
+                        <canvas 
+                            ref={canvasRef} 
+                            onMouseDown={start} onMouseMove={move} onMouseUp={()=>setIsDrawing(false)} onMouseLeave={()=>setIsDrawing(false)} 
+                            onTouchStart={start} onTouchMove={move} onTouchEnd={()=>setIsDrawing(false)} 
+                            className="w-full block cursor-crosshair touch-none"
+                            style={{ height: `${heightMul * 100}%` }}
+                        />
+                    </div>
+                    
+                    {/* Expand Button */}
+                    {heightMul < 3 && (
+                        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 opacity-50 hover:opacity-100 transition-opacity">
+                            <button onClick={handleExpand} className="bg-slate-800/80 border border-white/20 text-white px-4 py-1 rounded-full text-xs font-bold flex items-center gap-2 backdrop-blur">
+                                <i className="fa-solid fa-arrow-down"></i> EXTEND BOARD
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Touch Scroll Slider (Visible when expanded) */}
+                    {heightMul > 1 && (
+                        <div className="absolute right-2 top-4 bottom-20 w-6 bg-slate-900/30 rounded-full border border-white/5 flex items-center justify-center z-20 touch-none">
+                            <div 
+                                className="w-4 h-12 bg-white/20 rounded-full cursor-grab active:bg-cyan-500/50"
+                                onTouchMove={handleScrollDrag}
+                                onMouseDown={(e) => {
+                                    const moveHandler = (ev) => handleScrollDrag(ev);
+                                    const upHandler = () => { window.removeEventListener('mousemove', moveHandler); window.removeEventListener('mouseup', upHandler); };
+                                    window.addEventListener('mousemove', moveHandler);
+                                    window.addEventListener('mouseup', upHandler);
+                                }}
+                            ></div>
+                        </div>
+                    )}
+                </div>
+            );
         });
 
         // 3. Math Keyboard
@@ -671,7 +806,8 @@
             userAns, setUserAns, onSubmit, onGiveUp, onCheckWork, 
             isProcessing, messages, chatInput, setChatInput, onChat, 
             teacherMarks, setWbTool, setWbColor, triggerClear, wbTool, wbColor,
-            timer, onFinish, apiStatus, dbStatus, onReturnMenu
+            timer, onFinish, apiStatus, dbStatus, onReturnMenu,
+            savedBoard
         }) => {
             const [qCollapsed, setQCollapsed] = useState(false);
             const [drawerOpen, setDrawerOpen] = useState(false);
@@ -776,15 +912,16 @@
                     </div>
 
                     {/* Center Canvas Workspace */}
-                    <div className="flex-1 relative bg-[#0f172a]">
+                    <div className="flex-1 relative bg-[#0f172a] overflow-hidden">
                         <Whiteboard 
                             tool={wbTool} color={wbColor} size={2} 
                             triggerClear={triggerClear} teacherMarks={teacherMarks} 
                             getCanvasRef={(ref) => window._canvasRef = ref}
+                            savedBoard={savedBoard}
                         />
 
                         {/* Top Overlay Tools */}
-                        <div className="absolute top-4 left-1/2 -translate-x-1/2 glass-panel px-6 py-3 rounded-full flex items-center gap-6 shadow-2xl">
+                        <div className="absolute top-4 left-1/2 -translate-x-1/2 glass-panel px-6 py-3 rounded-full flex items-center gap-6 shadow-2xl z-30">
                             <button onClick={()=>setWbTool('pen')} className={`${wbTool==='pen'?'text-cyan-400 drop-shadow-[0_0_5px_rgba(34,211,238,0.8)]':'text-slate-400'}`}><i className="fa-solid fa-pen"></i></button>
                             <button onClick={()=>setWbTool('eraser')} className={`${wbTool==='eraser'?'text-pink-400 drop-shadow-[0_0_5px_rgba(244,114,182,0.8)]':'text-slate-400'}`}><i className="fa-solid fa-eraser"></i></button>
                             <input type="color" value={wbColor} onChange={(e)=>setWbColor(e.target.value)} className="w-5 h-5 rounded-full bg-transparent border-none cursor-pointer" />
@@ -801,7 +938,7 @@
                         </div>
 
                         {/* Question Card Overlay */}
-                        <div className={`absolute top-20 left-6 transition-all duration-300 ${qCollapsed ? 'w-12 h-12 overflow-hidden bg-slate-800/80 rounded-full cursor-pointer hover:bg-slate-700' : 'max-w-md glass-panel rounded-lg border-l-4 border-cyan-500'}`}>
+                        <div className={`absolute top-20 left-6 transition-all duration-300 z-20 ${qCollapsed ? 'w-12 h-12 overflow-hidden bg-slate-800/80 rounded-full cursor-pointer hover:bg-slate-700' : 'max-w-md glass-panel rounded-lg border-l-4 border-cyan-500'}`}>
                             {qCollapsed ? (
                                 <div className="w-full h-full flex items-center justify-center text-cyan-400" onClick={()=>setQCollapsed(false)}>
                                     <i className="fa-solid fa-expand"></i>
@@ -823,7 +960,7 @@
                         </div>
 
                         {/* Bottom Interaction Area */}
-                        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 w-full max-w-xl flex flex-col items-center gap-2">
+                        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 w-full max-w-xl flex flex-col items-center gap-2 z-20">
                             {/* Math Keyboard */}
                             {mathKbOpen && (
                                 <div className="w-full rounded-t-xl overflow-hidden shadow-2xl">
@@ -1084,6 +1221,7 @@
             // Session State
             const [questions, setQuestions] = useState([]);
             const [currentQIndex, setCurrentQIndex] = useState(0);
+            const [whiteboardData, setWhiteboardData] = useState({});
             const [loading, setLoading] = useState(false);
             const [timer, setTimer] = useState(0);
             const [isProcessing, setIsProcessing] = useState(false);
@@ -1120,7 +1258,8 @@
             useEffect(() => {
                 setTeacherMarks([]);
                 setTriggerClear(p => p+1);
-                setUserAns("");
+                // If there's an answer saved for this question, load it. Else clear.
+                setUserAns(questions[currentQIndex]?.userAns || "");
             }, [currentQIndex]);
 
             // --- HANDLERS ---
@@ -1228,7 +1367,7 @@
 
                     setQuestions(prev => {
                         const n = [...prev];
-                        n[currentQIndex] = { ...n[currentQIndex], status: status, userMark: result.mark, feedback: result.feedback };
+                        n[currentQIndex] = { ...n[currentQIndex], status: status, userMark: result.mark, feedback: result.feedback, userAns: userAns };
                         return n;
                     });
 
@@ -1305,8 +1444,13 @@
             };
 
             const changeQuestion = (idx) => {
+                // SAVE CURRENT BOARD before switching
+                if (window._canvasRef && window._canvasRef.current) {
+                    const data = window._canvasRef.current.toDataURL();
+                    setWhiteboardData(prev => ({...prev, [currentQIndex]: data}));
+                }
                 setCurrentQIndex(idx);
-                // Note: Clearing logic is now in useEffect[currentQIndex]
+                // Note: Loading logic is handled by passing whiteboardData[idx] prop to Whiteboard component
             };
 
             // --- RENDER ---
@@ -1335,6 +1479,7 @@
                             timer={timer} onFinish={()=>setView('debrief')}
                             apiStatus={apiStatus} dbStatus={dbStatus}
                             onReturnMenu={() => setView('config')}
+                            savedBoard={whiteboardData[currentQIndex]}
                         />
                     )}
 
