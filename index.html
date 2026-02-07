@@ -126,6 +126,13 @@
         const AI_ENGINE = {
             initKeys: async () => {
                 try {
+                    // Try to load saved user key first
+                    const savedKey = localStorage.getItem('atar_api_key');
+                    if (savedKey) {
+                        USER_PROVIDED_KEY = savedKey;
+                        console.log("[System] User API Key Loaded from Storage.");
+                    }
+
                     const ts = new Date().getTime();
                     const res = await fetch(`GE.txt?v=${ts}`); 
                     if (!res.ok) throw new Error("GE.txt missing");
@@ -244,10 +251,10 @@
                 throw lastError || new Error("All Gemini models failed");
             },
 
-            generateQuestion: async (subject, level, topics, difficulty = "Standard") => {
+            generateQuestion: async (subject, level, topics, difficulty = "Standard", extraInstructions = "") => {
                 const topic = topics.length > 0 ? topics[Math.floor(Math.random() * topics.length)] : "General";
                 
-                // OFFLINE CHECK: If no keys, return offline mode immediately to prevent console error
+                // OFFLINE CHECK
                 if (GEMINI_KEYS.length === 0 && !USER_PROVIDED_KEY) {
                     return {
                         text: `(Offline Mode) Solve $x$ if $2x + 5 = 15$. (API Key Required for AI)`, 
@@ -260,11 +267,13 @@
                 }
 
                 const ctx = SUBJECT_CONTEXT ? `Reference Material: ${SUBJECT_CONTEXT.substring(0, 4000)}` : "No specific textbook provided, use general curriculum knowledge.";
-                
+                const userDirectives = extraInstructions ? `USER INSTRUCTIONS (Important): ${extraInstructions}` : "";
+
                 try {
                     const prompt = `Role: WACE ATAR Exam Writer. Subject: ${subject} ${level}. Topic: ${topic}. Difficulty: ${difficulty}.
                     ${ctx}
-                    Task: Create a single exam question.
+                    ${userDirectives}
+                    Task: Create a single exam question based on the topic and user instructions.
                     Output: JSON ONLY.
                     {
                         "text": "The Question in LaTeX $...$",
@@ -311,7 +320,7 @@
             </div>
         );
 
-        // 2. Whiteboard (Reverted to Simple Canvas)
+        // 2. Whiteboard
         const Whiteboard = memo(({ tool, color, size, triggerClear, teacherMarks, getCanvasRef, savedBoard }) => {
             const canvasRef = useRef(null);
             const ctxRef = useRef(null);
@@ -474,7 +483,8 @@
 
         // Layer 1: Gateway
         const Gateway = ({ onNext, setUser }) => {
-            const [input, setInput] = useState("");
+            const [input, setInput] = useState(() => localStorage.getItem('atar_user') || "");
+            
             return (
                 <div className="flex items-center justify-center h-screen w-full relative z-10">
                     <div className="glass-panel p-1 w-full max-w-md rounded-2xl fade-in">
@@ -489,9 +499,16 @@
                                     placeholder="ENTER SURNAME"
                                     value={input}
                                     onKeyDown={(e) => {
-                                        if (e.key === 'Enter' && input) onNext();
+                                        if (e.key === 'Enter' && input) {
+                                            setUser(input.toUpperCase());
+                                            onNext();
+                                        }
                                     }}
-                                    onChange={(e) => { setInput(e.target.value.toUpperCase()); setUser(e.target.value.toUpperCase()); }}
+                                    onChange={(e) => { 
+                                        const val = e.target.value.toUpperCase();
+                                        setInput(val); 
+                                        setUser(val); 
+                                    }}
                                 />
                             </div>
 
@@ -511,8 +528,9 @@
         // Layer 2: Configuration
         const Configuration = ({ user, config, setConfig, onStart, apiStatus, onBack }) => {
             const [customFiles, setCustomFiles] = useState([]);
-            const [apiKeyInput, setApiKeyInput] = useState("");
+            const [apiKeyInput, setApiKeyInput] = useState(() => localStorage.getItem('atar_api_key') || "");
             const [topics, setTopics] = useState([]);
+            const [newTopicInput, setNewTopicInput] = useState("");
 
             const curriculum = {
                 "Methods": ["Functions", "Calculus", "Random Variables", "Logarithms", "Integrals"],
@@ -523,7 +541,8 @@
 
             useEffect(() => {
                 setTopics(curriculum[config.subject] || []);
-                setConfig(p => ({...p, selectedTopics: []})); // Reset topics on subject change
+                // If switching subject, we might want to keep custom topics? 
+                // For now, let's keep them in config.customTopicsList
             }, [config.subject]);
 
             const handleFileDrop = (e) => {
@@ -540,6 +559,32 @@
                     if(current.includes(t)) return {...p, selectedTopics: current.filter(x=>x!==t)};
                     return {...p, selectedTopics: [...current, t]};
                 });
+            };
+
+            const handleAddTopic = () => {
+                if (!newTopicInput.trim()) return;
+                const newTopic = newTopicInput.trim();
+                setConfig(p => ({
+                    ...p,
+                    customTopicsList: [...p.customTopicsList, newTopic], // Add to persistent list
+                    selectedTopics: [...p.selectedTopics, newTopic] // Auto-select
+                }));
+                setNewTopicInput("");
+            };
+
+            const handleRemoveTopic = (e, t) => {
+                e.stopPropagation(); // Prevent selection toggle when clicking remove
+                setConfig(p => ({
+                    ...p,
+                    customTopicsList: p.customTopicsList.filter(x => x !== t),
+                    selectedTopics: p.selectedTopics.filter(x => x !== t)
+                }));
+            };
+
+            const saveApiKey = (val) => {
+                setApiKeyInput(val);
+                localStorage.setItem('atar_api_key', val);
+                USER_PROVIDED_KEY = val;
             };
 
             return (
@@ -625,6 +670,7 @@
                                         </div>
                                     ) : (
                                         <div className="space-y-2">
+                                            {/* Standard Topics */}
                                             {topics.map(t => (
                                                 <button 
                                                     key={t}
@@ -635,6 +681,36 @@
                                                     {config.selectedTopics.includes(t) && <i className="fa-solid fa-check text-purple-400"></i>}
                                                 </button>
                                             ))}
+                                            
+                                            {/* Custom Topics List */}
+                                            {config.customTopicsList.length > 0 && <div className="text-[10px] text-slate-500 font-bold uppercase mt-4 mb-1">Custom Topics</div>}
+                                            {config.customTopicsList.map(t => (
+                                                <button 
+                                                    key={t}
+                                                    onClick={() => toggleTopic(t)}
+                                                    className={`w-full p-3 rounded-lg flex justify-between items-center text-sm border transition-all group ${config.selectedTopics.includes(t) ? 'bg-purple-500/20 border-purple-500 text-white' : 'bg-transparent border-white/5 text-slate-400 hover:border-white/20'}`}
+                                                >
+                                                    <span>{t}</span>
+                                                    <div className="flex gap-2">
+                                                        {config.selectedTopics.includes(t) && <i className="fa-solid fa-check text-purple-400"></i>}
+                                                        <span onClick={(e) => handleRemoveTopic(e, t)} className="text-slate-600 hover:text-red-400 cursor-pointer px-2"><i className="fa-solid fa-times"></i></span>
+                                                    </div>
+                                                </button>
+                                            ))}
+
+                                            {/* Custom Topic Input */}
+                                            <div className="pt-2 border-t border-white/10 mt-2 flex gap-2">
+                                                <input 
+                                                    className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:border-purple-500 focus:outline-none"
+                                                    placeholder="Type custom topic..."
+                                                    value={newTopicInput}
+                                                    onChange={(e) => setNewTopicInput(e.target.value)}
+                                                    onKeyPress={(e) => e.key === 'Enter' && handleAddTopic()}
+                                                />
+                                                <button onClick={handleAddTopic} className="bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white px-3 rounded-lg text-xs font-bold border border-purple-500/30 transition">
+                                                    ADD
+                                                </button>
+                                            </div>
                                         </div>
                                     )}
                                 </div>
@@ -678,10 +754,7 @@
                                         className="w-full glass-input rounded-lg p-2 text-xs" 
                                         placeholder="Enter Google Gemini API Key if system fails..."
                                         value={apiKeyInput}
-                                        onChange={(e) => {
-                                            setApiKeyInput(e.target.value);
-                                            USER_PROVIDED_KEY = e.target.value;
-                                        }}
+                                        onChange={(e) => saveApiKey(e.target.value)}
                                     />
                                 </div>
                             </div>
@@ -1104,15 +1177,25 @@
         // --- MAIN APP CONTROLLER ---
         const App = () => {
             const [view, setView] = useState('gateway'); // gateway, config, arena, debrief
-            const [user, setUser] = useState("");
+            const [user, setUser] = useState(() => localStorage.getItem('atar_user') || "");
             const [apiStatus, setApiStatus] = useState(true);
             const [dbStatus, setDbStatus] = useState(true);
             
-            // Config State
-            const [config, setConfig] = useState({
-                subject: 'Methods', level: 'Year 12', count: 5, 
-                mode: 'comprehensive', selectedTopics: [],
-                instructions: "", customFiles: []
+            // Config State with Persistent Init
+            const [config, setConfig] = useState(() => {
+                const saved = localStorage.getItem('atar_config');
+                if (saved) {
+                    try {
+                        const parsed = JSON.parse(saved);
+                        // Reset session-specific parts but keep preferences
+                        return { ...parsed, customFiles: [] };
+                    } catch(e) {}
+                }
+                return {
+                    subject: 'Methods', level: 'Year 12', count: 5, 
+                    mode: 'comprehensive', selectedTopics: [],
+                    instructions: "", customFiles: [], customTopic: "", customTopicsList: []
+                };
             });
 
             // Session State
@@ -1145,6 +1228,15 @@
                 init();
             }, []);
 
+            // PERSISTENCE EFFECT
+            useEffect(() => {
+                if (user) localStorage.setItem('atar_user', user);
+                if (config) localStorage.setItem('atar_config', JSON.stringify({
+                    ...config,
+                    customFiles: [] // Don't save large files
+                }));
+            }, [user, config]);
+
             useEffect(() => {
                 let interval;
                 if(view === 'arena') interval = setInterval(() => setTimer(t => t+1), 1000);
@@ -1174,9 +1266,14 @@
                 setQuestions(initialQs);
                 setMessages([{ role: 'system', text: `Session Active. Subject: ${config.subject}. Good luck, ${user}.` }]);
                 
-                // PRE-LOADER LOGIC: Generate 2 questions before dropping curtain
-                const q1 = await AI_ENGINE.generateQuestion(config.subject, config.level, config.selectedTopics);
-                const q2 = await AI_ENGINE.generateQuestion(config.subject, config.level, config.selectedTopics);
+                // PRE-LOADER LOGIC
+                // Combine standard topics with custom topic if present
+                const activeTopics = [...config.selectedTopics];
+                // Also explicitly add any from customTopicsList if selected (already handled by toggle logic)
+                
+                // Generate first 2 questions immediately
+                const q1 = await AI_ENGINE.generateQuestion(config.subject, config.level, activeTopics, "Standard", config.instructions);
+                const q2 = await AI_ENGINE.generateQuestion(config.subject, config.level, activeTopics, "Standard", config.instructions);
                 
                 setQuestions(prev => {
                     const n = [...prev];
@@ -1186,16 +1283,16 @@
                 });
 
                 // Start Background Generator for rest
-                generateBackgroundQuestions(2, config.count);
+                generateBackgroundQuestions(2, config.count, activeTopics);
 
                 setLoading(false);
                 setView('arena');
             };
 
-            const generateBackgroundQuestions = async (startIndex, total) => {
+            const generateBackgroundQuestions = async (startIndex, total, topics) => {
                 for (let i = startIndex; i < total; i++) {
                     await new Promise(r => setTimeout(r, 2000)); // Rate limit
-                    const q = await AI_ENGINE.generateQuestion(config.subject, config.level, config.selectedTopics);
+                    const q = await AI_ENGINE.generateQuestion(config.subject, config.level, topics, "Standard", config.instructions);
                     
                     // Optimization: If offline mode triggered, fill rest instantly to avoid spamming errors
                     if (q.isOffline) {
@@ -1229,8 +1326,10 @@
                 }
 
                 try {
+                    const extra = config.instructions ? `User Special Instructions for Grading: ${config.instructions}` : "";
                     const prompt = `Role: Senior Math Teacher. Grade this submission.
                     Context: ATAR ${config.subject} ${config.level}.
+                    ${extra}
                     Question: ${q.text}
                     Correct Answer: ${q.answer}
                     Student Answer: ${userAns}
