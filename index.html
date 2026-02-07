@@ -356,6 +356,11 @@
 
             // Precise Cursor Tracking
             const getPos = (e) => {
+                // Use offsetX/Y for mouse events for better precision
+                if (e.nativeEvent && typeof e.nativeEvent.offsetX === 'number') {
+                    return { x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY };
+                }
+                // Fallback for touch
                 const rect = canvasRef.current.getBoundingClientRect();
                 const clientX = e.touches ? e.touches[0].clientX : e.clientX;
                 const clientY = e.touches ? e.touches[0].clientY : e.clientY;
@@ -679,7 +684,7 @@
             useEffect(() => { if(scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [messages, activeTab]);
 
             const q = questions[currentQIndex] || {};
-            const isGraded = q.status === 'correct' || q.status === 'wrong';
+            const isGraded = q.status === 'correct' || q.status === 'wrong' || q.status === 'partial';
             const isLastQ = currentQIndex === questions.length - 1;
 
             // Auto switch to results when graded
@@ -741,13 +746,14 @@
                         </div>
 
                         {/* Questions List (Moved Down) */}
-                        <div className="flex-1 w-full flex flex-col items-center gap-4 overflow-y-auto custom-scroll no-scrollbar pt-4 pb-4">
+                        <div className="flex-1 w-full flex flex-col items-center gap-4 overflow-y-auto custom-scroll no-scrollbar pt-8 pb-4">
                             {questions.map((ques, i) => (
                                 <button key={i} onClick={() => !isProcessing && ques.status !== 'generating' && setCurrentQIndex(i)}
                                     className={`w-10 h-10 rounded-lg flex items-center justify-center text-xs font-bold transition-all relative
                                     ${i === currentQIndex ? 'ring-2 ring-white scale-110 z-10' : 'opacity-60 hover:opacity-100'}
                                     ${ques.status === 'generating' ? 'bg-transparent border-2 border-cyan-500/50' : 
                                       ques.status === 'correct' ? 'bg-emerald-600 text-white' : 
+                                      ques.status === 'partial' ? 'bg-amber-600 text-white' :
                                       ques.status === 'wrong' ? 'bg-red-600 text-white' : 
                                       'bg-slate-800 text-slate-300'}`}
                                 >
@@ -910,10 +916,18 @@
                                 <div className="space-y-4">
                                     {isGraded ? (
                                         <div className="animate-fade-in">
-                                            <div className={`p-4 rounded-xl border mb-4 text-center ${q.status === 'correct' ? 'bg-emerald-900/20 border-emerald-500/30' : 'bg-red-900/20 border-red-500/30'}`}>
+                                            <div className={`p-4 rounded-xl border mb-4 text-center ${
+                                                q.status === 'correct' ? 'bg-emerald-900/20 border-emerald-500/30' : 
+                                                q.status === 'partial' ? 'bg-amber-900/20 border-amber-500/30' :
+                                                'bg-red-900/20 border-red-500/30'
+                                            }`}>
                                                 <div className="text-2xl font-bold text-white mb-1">{q.userMark || 0} / {q.marks || 3}</div>
-                                                <div className={`text-xs font-bold uppercase tracking-wider ${q.status === 'correct' ? 'text-emerald-400' : 'text-red-400'}`}>
-                                                    {q.status === 'correct' ? 'Correct Answer' : 'Incorrect'}
+                                                <div className={`text-xs font-bold uppercase tracking-wider ${
+                                                    q.status === 'correct' ? 'text-emerald-400' : 
+                                                    q.status === 'partial' ? 'text-amber-400' :
+                                                    'text-red-400'
+                                                }`}>
+                                                    {q.status === 'correct' ? 'Correct Answer' : q.status === 'partial' ? 'Partially Correct' : 'Incorrect'}
                                                 </div>
                                             </div>
                                             
@@ -1102,6 +1116,13 @@
                 return () => clearInterval(interval);
             }, [view]);
 
+            // Clear board and marks when question changes
+            useEffect(() => {
+                setTeacherMarks([]);
+                setTriggerClear(p => p+1);
+                setUserAns("");
+            }, [currentQIndex]);
+
             // --- HANDLERS ---
             
             const startSession = async () => {
@@ -1201,9 +1222,13 @@
                     const resTxt = await AI_ENGINE.callGemini(prompt, imgData, true);
                     const result = JSON.parse(resTxt);
 
+                    let status = 'wrong';
+                    if (result.mark === q.marks) status = 'correct';
+                    else if (result.mark > 0) status = 'partial';
+
                     setQuestions(prev => {
                         const n = [...prev];
-                        n[currentQIndex] = { ...n[currentQIndex], status: result.correct ? 'correct' : 'wrong', userMark: result.mark, feedback: result.feedback };
+                        n[currentQIndex] = { ...n[currentQIndex], status: status, userMark: result.mark, feedback: result.feedback };
                         return n;
                     });
 
@@ -1212,7 +1237,7 @@
                     
                     setMessages(p => {
                         const n = [...p]; n.pop(); // remove 'Grading...'
-                        return [...n, { role: 'ai', text: `Result: ${result.mark}/${q.marks}. ${result.correct ? 'Correct' : 'Incorrect'}.` }];
+                        return [...n, { role: 'ai', text: `Result: ${result.mark}/${q.marks}. ${status === 'correct' ? 'Correct' : status === 'partial' ? 'Partially Correct' : 'Incorrect'}.` }];
                     });
 
                 } catch(e) {
@@ -1281,9 +1306,7 @@
 
             const changeQuestion = (idx) => {
                 setCurrentQIndex(idx);
-                setTeacherMarks([]); // Remove ticks
-                setTriggerClear(p => p+1); // Clear board
-                setUserAns("");
+                // Note: Clearing logic is now in useEffect[currentQIndex]
             };
 
             // --- RENDER ---
