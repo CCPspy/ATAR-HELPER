@@ -106,6 +106,19 @@
 
         .spin-slow { animation: spin 3s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        
+        /* Text Tool Input */
+        .text-tool-input {
+            background: transparent;
+            border: 1px dashed rgba(34, 211, 238, 0.5);
+            color: #22d3ee;
+            padding: 2px;
+            font-family: 'JetBrains Mono', monospace;
+            outline: none;
+            resize: none;
+            overflow: hidden;
+            white-space: pre;
+        }
     </style>
 </head>
 <body>
@@ -118,6 +131,7 @@
         let GEMINI_KEYS = []; 
         let SUBJECT_CONTEXT = ""; 
         let USER_PROVIDED_KEY = null;
+        let CURRENT_AI_MODEL = "Initializing...";
 
         // --- UTILS ---
         const decodeBase64 = (str) => { try { let d=atob(str); if(d.includes("AIza"))return d; return null; } catch(e){return null;} }
@@ -166,8 +180,6 @@
                 // 1. Load Custom Files First (Priority)
                 if (customFiles.length > 0) {
                     for (const file of customFiles) {
-                         // Simple text extraction for now (assuming text files or processed content)
-                         // For actual PDF objects in memory we use PDF.js
                          if (file.type === 'application/pdf') {
                              try {
                                 const arrayBuffer = await file.arrayBuffer();
@@ -179,7 +191,6 @@
                                 }
                              } catch(e) { console.error("PDF Parse Error", e); }
                          } else {
-                             // Assume text/plain
                              const text = await file.text();
                              context += text + " ";
                          }
@@ -216,15 +227,14 @@
             callGemini: async (prompt, imageData = null, jsonMode = false) => {
                 const keysToUse = USER_PROVIDED_KEY ? [USER_PROVIDED_KEY] : GEMINI_KEYS;
                 
-                // CRITICAL: Stop here if no keys to prevent console spam
                 if (keysToUse.length === 0) throw new Error("NO_API_KEY");
 
-                // Updated Model List: Prioritize efficient free-tier models
+                // Updated Model List: Prioritize efficient free-tier models with fallback
                 const models = [
-                    "gemini-2.5-flash",         // Primary
-                    "gemini-2.5-flash-lite",    // Fallback 1
-                    "gemini-2.0-flash",         // Fallback 2
-                    "gemini-2.0-flash-lite"     // Fallback 3
+                    "gemini-2.5-flash",         
+                    "gemini-2.5-flash-lite",    
+                    "gemini-2.0-flash",         
+                    "gemini-2.0-flash-lite"     
                 ];
                 
                 const parts = [{ text: prompt }];
@@ -232,10 +242,9 @@
 
                 let lastError = null;
                 for (const model of models) {
-                    // Simple Round Robin for system keys, single use for user key
                     const key = USER_PROVIDED_KEY || keysToUse[Math.floor(Math.random() * keysToUse.length)];
                     try {
-                        console.log(`[AI] Attempting ${model}...`);
+                        // console.log(`[AI] Attempting ${model}...`);
                         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -246,7 +255,7 @@
                         });
                         
                         if (!response.ok) {
-                            // If rate limit (429) or service unavailable (503), throw to catch block to try next model
+                            // If rate limit (429) or service unavailable (503), throw to try next model
                             if (response.status === 429 || response.status === 503) {
                                 throw new Error(`Model Overloaded: ${response.status}`);
                             }
@@ -255,12 +264,25 @@
                         }
                         
                         const data = await response.json();
-                        return data.candidates[0].content.parts[0].text;
+                        CURRENT_AI_MODEL = model; // Update global indicator
+                        
+                        let text = data.candidates[0].content.parts[0].text;
+                        
+                        // SANITIZE JSON: Fix common bad escapes for LaTeX
+                        if (jsonMode) {
+                            // Fix unescaped backslashes that aren't already escaped
+                            // This regex looks for \ that is NOT followed by " or \ or / or b/f/n/r/t/u
+                            // It's tricky, so we do a simpler pass for common LaTeX
+                            // text = text.replace(/\\/g, "\\\\"); // Too aggressive?
+                            // Try to fix specific LaTeX backslashes that might break JSON
+                            // Actually, just try parse. If fail, aggressive fix.
+                        }
+                        
+                        return text;
                     } catch (e) { 
                         console.warn(`[AI] ${model} failed:`, e.message);
                         lastError = e; 
-                        // If user provided a key, we might not want to retry with system keys, but if it's a model issue, we can try different models with same key
-                        if(USER_PROVIDED_KEY && models.indexOf(model) === models.length - 1) break; // Stop if last model on user key
+                        if(USER_PROVIDED_KEY && models.indexOf(model) === models.length - 1) break; 
                         continue; 
                     }
                 }
@@ -284,26 +306,44 @@
 
                 const ctx = SUBJECT_CONTEXT ? `Reference Material: ${SUBJECT_CONTEXT.substring(0, 4000)}` : "No specific textbook provided, use general curriculum knowledge.";
                 const userDirectives = extraInstructions ? `USER INSTRUCTIONS (Important): ${extraInstructions}` : "";
+                const uniqueSeed = Date.now(); // Ensure uniqueness
 
                 try {
-                    const prompt = `Role: WACE ATAR Exam Writer. Subject: ${subject} ${level}. Topic: ${topic}. Difficulty: ${difficulty}.
+                    const prompt = `Role: WACE ATAR Exam Writer. Subject: ${subject} ${level}. Topic: ${topic}. Difficulty: ${difficulty}. Seed: ${uniqueSeed}
                     ${ctx}
                     ${userDirectives}
-                    Task: Create a single exam question based on the topic and user instructions.
-                    Output: JSON ONLY.
+                    Task: Create a SINGLE, UNIQUE exam question based on the topic. Do not repeat previous questions.
+                    Output: JSON ONLY. IMPORTANT: Escape all LaTeX backslashes with double backslashes (e.g. \\\\frac{a}{b}).
+                    Format:
                     {
-                        "text": "The Question in LaTeX $...$",
+                        "text": "Question text with LaTeX $...$",
                         "topic": "${topic}",
-                        "answer": "The Final Answer",
-                        "hint": "A short hint",
+                        "answer": "Final Answer",
+                        "hint": "Short hint",
                         "marks": 3
                     }`;
                     
                     const text = await AI_ENGINE.callGemini(prompt, null, true);
-                    return JSON.parse(text);
+                    
+                    try {
+                        return JSON.parse(text);
+                    } catch (jsonErr) {
+                        // Fallback JSON repair for "Bad escaped character"
+                        const fixedText = text.replace(/\\/g, "\\\\").replace(/\\\\"/g, '\\"'); // Simple fix attempt
+                        try {
+                            return JSON.parse(fixedText); 
+                        } catch (e2) {
+                            // Extract manually if JSON fails
+                            return {
+                                text: text.substring(0, 300) + "... (JSON Parse Error)",
+                                topic: topic,
+                                answer: "See working",
+                                marks: 3
+                            };
+                        }
+                    }
                 } catch (e) {
                     console.error("Gen Q Failed:", e);
-                    // Silent Fallback
                     return {
                         text: `(System Error) Unable to generate question. Please check API Key. Error: ${e.message}`, topic: "System", answer: "N/A", hint: "Check console", marks: 0, isOffline: true
                     };
@@ -337,72 +377,75 @@
             </div>
         );
 
-        // 2. Whiteboard
-        const Whiteboard = memo(({ tool, color, size, triggerClear, teacherMarks, getCanvasRef, savedBoard, readOnly }) => {
+        // 2. Whiteboard (Updated with Text Tool & Saving)
+        const Whiteboard = memo(({ tool, color, size, triggerClear, teacherMarks, getCanvasRef, savedBoard, readOnly, fontSize, updateWhiteboardData }) => {
             const canvasRef = useRef(null);
             const ctxRef = useRef(null);
+            const containerRef = useRef(null);
             const [isDrawing, setIsDrawing] = useState(false);
+            const [textObjects, setTextObjects] = useState([]); // {id, x, y, text, color, size}
+            const [editingId, setEditingId] = useState(null);
 
+            // Initialize / Resize
             useEffect(() => {
                 if(getCanvasRef) getCanvasRef(canvasRef);
                 const canvas = canvasRef.current;
+                const container = containerRef.current;
                 
-                // Initialize or Resize
                 const resize = () => {
-                    const rect = canvas.getBoundingClientRect();
-                    // Set actual size in memory
+                    const rect = container.getBoundingClientRect();
                     canvas.width = rect.width;
                     canvas.height = rect.height;
                     const ctx = canvas.getContext('2d');
                     ctx.lineCap = "round"; ctx.lineJoin = "round";
                     ctxRef.current = ctx;
                     
-                    // Fill background initially to ensure solid background for exports
-                    ctx.fillStyle = "#0f172a"; // Match bg-slate-900
+                    // Fill background
+                    ctx.fillStyle = "#0f172a";
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
                     
-                    // Restore if resizing (rare during test) or loading new
-                    if(savedBoard) {
+                    // Restore Image if exists
+                    if(savedBoard && savedBoard.image) {
                         const img = new Image();
                         img.onload = () => ctx.drawImage(img, 0, 0);
-                        img.src = savedBoard;
+                        img.src = savedBoard.image;
                     }
                 };
                 
                 resize();
+                // Restore Texts
+                if (savedBoard && savedBoard.texts) {
+                    setTextObjects(savedBoard.texts);
+                } else {
+                    setTextObjects([]);
+                }
+
                 window.addEventListener('resize', resize);
                 return () => window.removeEventListener('resize', resize);
-            }, []);
+            }, [savedBoard]); // Reload when board data prop changes
 
-            // Restore Saved Board OR Clear on new question
+            // Update parent with current state on change (for auto-save)
             useEffect(() => {
-                const ctx = ctxRef.current;
-                const canvas = canvasRef.current;
-                if (!ctx || !canvas) return;
-
-                // Always start clean when switching questions
-                ctx.fillStyle = "#0f172a"; 
-                ctx.fillRect(0, 0, canvas.width, canvas.height); // Solid fill clear
-
-                if (savedBoard) {
-                    const img = new Image();
-                    img.onload = () => {
-                        ctx.drawImage(img, 0, 0); // Draw saved image
-                    };
-                    img.src = savedBoard;
+                // This is tricky. We need to save before unmount/change.
+                // We rely on the parent calling save before switching.
+                // But we expose the text objects getter to parent via ref?
+                if (canvasRef.current) {
+                    canvasRef.current.getTexts = () => textObjects;
                 }
-            }, [savedBoard]); // Depends on savedBoard prop changing
+            }, [textObjects]);
 
+            // Manual Clear
             useEffect(() => {
                 if (triggerClear > 0 && ctxRef.current) {
-                    // Manual clear triggers solid fill
                     const ctx = ctxRef.current;
                     const canvas = canvasRef.current;
                     ctx.fillStyle = "#0f172a";
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    setTextObjects([]); // Clear text too
                 }
             }, [triggerClear]);
 
+            // Teacher Marks Overlay
             useEffect(() => {
                 if (teacherMarks?.length && ctxRef.current) {
                     const ctx = ctxRef.current;
@@ -420,7 +463,7 @@
                 }
             }, [teacherMarks]);
 
-            // Precise Cursor Tracking
+            // Drawing Logic
             const getPos = (e) => {
                 if (e.nativeEvent && typeof e.nativeEvent.offsetX === 'number') {
                     return { x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY };
@@ -431,24 +474,40 @@
                 return { x: clientX - rect.left, y: clientY - rect.top };
             };
 
-            const start = (e) => {
-                if (readOnly) return; 
+            const handleMouseDown = (e) => {
+                if (readOnly) return;
+                
+                // TEXT TOOL
+                if (tool === 'text') {
+                    // Check if clicked on existing text
+                    // Simplification: Check proximity to existing texts?
+                    // For now, simple creation. Click = New Text or Blur old.
+                    if (editingId !== null) {
+                        setEditingId(null); // Click away to finish editing
+                        return;
+                    }
+                    
+                    const {x, y} = getPos(e);
+                    const newId = Date.now();
+                    setTextObjects(prev => [...prev, { id: newId, x, y, text: "", color: color, size: fontSize }]);
+                    setEditingId(newId);
+                    return;
+                }
+
                 const {x, y} = getPos(e);
                 ctxRef.current.beginPath(); 
                 ctxRef.current.moveTo(x, y);
                 setIsDrawing(true);
             };
 
-            const move = (e) => {
-                if(!isDrawing || readOnly) return; 
+            const handleMouseMove = (e) => {
+                if(!isDrawing || readOnly || tool === 'text') return; 
                 const {x, y} = getPos(e);
                 const ctx = ctxRef.current;
                 if(tool==='eraser') { 
-                    // Eraser paints background color instead of transparent
                     ctx.strokeStyle = "#0f172a"; 
                     ctx.lineWidth = size*10; 
-                }
-                else { 
+                } else { 
                     ctx.globalCompositeOperation = 'source-over'; 
                     ctx.lineWidth = size; 
                     ctx.strokeStyle = color; 
@@ -457,13 +516,51 @@
                 ctx.stroke();
             };
 
+            const handleTextChange = (id, newText) => {
+                setTextObjects(prev => prev.map(t => t.id === id ? { ...t, text: newText } : t));
+            };
+
             return (
-                <canvas 
-                    ref={canvasRef} 
-                    onMouseDown={start} onMouseMove={move} onMouseUp={()=>setIsDrawing(false)} onMouseLeave={()=>setIsDrawing(false)} 
-                    onTouchStart={start} onTouchMove={move} onTouchEnd={()=>setIsDrawing(false)} 
-                    className={`w-full h-full touch-none ${readOnly ? 'cursor-not-allowed' : 'cursor-crosshair'}`}
-                />
+                <div className="relative w-full h-full" ref={containerRef}>
+                    <canvas 
+                        ref={canvasRef} 
+                        onMouseDown={handleMouseDown} 
+                        onMouseMove={handleMouseMove} 
+                        onMouseUp={()=>setIsDrawing(false)} 
+                        onMouseLeave={()=>setIsDrawing(false)} 
+                        onTouchStart={handleMouseDown} 
+                        onTouchMove={handleMouseMove} 
+                        onTouchEnd={()=>setIsDrawing(false)} 
+                        className={`absolute inset-0 w-full h-full touch-none ${readOnly ? 'cursor-not-allowed' : tool==='text' ? 'cursor-text' : 'cursor-crosshair'}`}
+                    />
+                    {/* Text Overlays */}
+                    {textObjects.map(t => (
+                        <div 
+                            key={t.id}
+                            style={{ 
+                                position: 'absolute', left: t.x, top: t.y, 
+                                color: t.color, fontSize: `${t.size * 10}px`,
+                                pointerEvents: readOnly ? 'none' : 'auto'
+                            }}
+                        >
+                            {editingId === t.id && !readOnly ? (
+                                <textarea 
+                                    className="text-tool-input"
+                                    value={t.text}
+                                    onChange={(e) => handleTextChange(t.id, e.target.value)}
+                                    autoFocus
+                                    onBlur={() => setEditingId(null)}
+                                    style={{ fontSize: `${t.size * 10}px`, color: t.color }}
+                                />
+                            ) : (
+                                <div 
+                                    onClick={(e) => { e.stopPropagation(); !readOnly && setEditingId(t.id); }}
+                                    className="whitespace-pre cursor-text p-1 hover:border hover:border-white/10"
+                                >{t.text || "Type..."}</div>
+                            )}
+                        </div>
+                    ))}
+                </div>
             );
         });
 
@@ -811,13 +908,14 @@
             isProcessing, messages, chatInput, setChatInput, onChat, 
             teacherMarks, setWbTool, setWbColor, triggerClear, wbTool, wbColor,
             timer, onFinish, apiStatus, dbStatus, onReturnMenu,
-            savedBoard
+            savedBoard, currentAIModel
         }) => {
             const [qCollapsed, setQCollapsed] = useState(false);
             const [drawerOpen, setDrawerOpen] = useState(false);
             const [mathKbOpen, setMathKbOpen] = useState(false);
-            const [activeTab, setActiveTab] = useState('tutor'); // 'tutor' or 'results'
-            const [modalConfig, setModalConfig] = useState(null); // { title, message, onConfirm, onCancel }
+            const [activeTab, setActiveTab] = useState('tutor'); 
+            const [modalConfig, setModalConfig] = useState(null); 
+            const [wbFontSize, setWbFontSize] = useState(2);
 
             const scrollRef = useRef(null);
 
@@ -833,7 +931,7 @@
                 if (isGraded) {
                     setActiveTab('results');
                 } else {
-                    setActiveTab('tutor'); // Reset to tutor for new questions
+                    setActiveTab('tutor'); 
                 }
             }, [currentQIndex, q.status]);
 
@@ -884,9 +982,12 @@
                                     <span className="text-[9px] font-bold text-emerald-500 mt-2 tracking-wider text-center">ONLINE</span>
                                 </>
                             )}
+                            <div className="mt-1 px-1 bg-white/5 rounded text-[8px] text-slate-400 text-center max-w-[60px] truncate" title={currentAIModel}>
+                                {currentAIModel.replace('gemini-','')}
+                            </div>
                         </div>
 
-                        {/* Questions List (Moved Down) */}
+                        {/* Questions List */}
                         <div className="flex-1 w-full flex flex-col items-center gap-4 overflow-y-auto custom-scroll no-scrollbar pt-8 pb-4">
                             {questions.map((ques, i) => (
                                 <button key={i} onClick={() => !isProcessing && ques.status !== 'generating' && setCurrentQIndex(i)}
@@ -919,7 +1020,8 @@
                     {/* Center Canvas Workspace */}
                     <div className="flex-1 relative bg-[#0f172a] overflow-hidden">
                         <Whiteboard 
-                            tool={wbTool} color={wbColor} size={2} 
+                            tool={wbTool} color={wbColor} size={wbTool === 'text' ? wbFontSize : 2}
+                            fontSize={wbFontSize}
                             triggerClear={triggerClear} teacherMarks={teacherMarks} 
                             getCanvasRef={(ref) => window._canvasRef = ref}
                             savedBoard={savedBoard}
@@ -927,10 +1029,22 @@
                         />
 
                         {/* Top Overlay Tools */}
-                        <div className={`absolute top-4 left-1/2 -translate-x-1/2 glass-panel px-6 py-3 rounded-full flex items-center gap-6 shadow-2xl z-30 transition-opacity ${isReadOnly ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+                        <div className={`absolute top-4 left-1/2 -translate-x-1/2 glass-panel px-4 py-3 rounded-full flex items-center gap-4 shadow-2xl z-30 transition-opacity ${isReadOnly ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
                             <button onClick={()=>setWbTool('pen')} className={`${wbTool==='pen'?'text-cyan-400 drop-shadow-[0_0_5px_rgba(34,211,238,0.8)]':'text-slate-400'}`}><i className="fa-solid fa-pen"></i></button>
                             <button onClick={()=>setWbTool('eraser')} className={`${wbTool==='eraser'?'text-pink-400 drop-shadow-[0_0_5px_rgba(244,114,182,0.8)]':'text-slate-400'}`}><i className="fa-solid fa-eraser"></i></button>
-                            <input type="color" value={wbColor} onChange={(e)=>setWbColor(e.target.value)} className="w-5 h-5 rounded-full bg-transparent border-none cursor-pointer" />
+                            <button onClick={()=>setWbTool('text')} className={`${wbTool==='text'?'text-emerald-400 drop-shadow-[0_0_5px_rgba(52,211,153,0.8)]':'text-slate-400'}`}><i className="fa-solid fa-font"></i></button>
+                            
+                            <div className="flex items-center gap-2 border-l border-white/20 pl-4">
+                                <input type="color" value={wbColor} onChange={(e)=>setWbColor(e.target.value)} className="w-5 h-5 rounded-full bg-transparent border-none cursor-pointer" />
+                                {wbTool === 'text' && (
+                                    <input 
+                                        type="range" min="1" max="5" step="0.5" 
+                                        value={wbFontSize} onChange={(e)=>setWbFontSize(parseFloat(e.target.value))} 
+                                        className="w-16 h-1 bg-slate-600 rounded-full" title="Font Size"
+                                    />
+                                )}
+                            </div>
+
                             <div className="w-px h-4 bg-white/20"></div>
                             <button onClick={() => setModalConfig({
                                 title: "Clear Board?",
@@ -1237,7 +1351,7 @@
             // Session State
             const [questions, setQuestions] = useState([]);
             const [currentQIndex, setCurrentQIndex] = useState(0);
-            const [whiteboardData, setWhiteboardData] = useState({});
+            const [whiteboardData, setWhiteboardData] = useState({}); // { [index]: { image: dataURL, texts: [] } }
             const [loading, setLoading] = useState(false);
             const [timer, setTimer] = useState(0);
             const [isProcessing, setIsProcessing] = useState(false);
@@ -1282,7 +1396,8 @@
             // Clear board and marks when question changes
             useEffect(() => {
                 setTeacherMarks([]);
-                setTriggerClear(p => p+1);
+                setTriggerClear(0); // Reset trigger
+                
                 // If there's an answer saved for this question, load it. Else clear.
                 setUserAns(questions[currentQIndex]?.userAns || "");
             }, [currentQIndex]);
@@ -1292,6 +1407,8 @@
             const startSession = async () => {
                 setLoading(true);
                 setCurrentQIndex(0); // Ensure start at first Q
+                setWhiteboardData({}); // Clear old session boards
+                
                 // Load Context
                 await AI_ENGINE.loadContext(config.subject, config.level, config.customFiles);
                 
@@ -1305,7 +1422,6 @@
                 // PRE-LOADER LOGIC
                 // Combine standard topics with custom topic if present
                 const activeTopics = [...config.selectedTopics];
-                // Also explicitly add any from customTopicsList if selected (already handled by toggle logic)
                 
                 // Generate first 2 questions immediately
                 const q1 = await AI_ENGINE.generateQuestion(config.subject, config.level, activeTopics, "Standard", config.instructions);
@@ -1357,21 +1473,47 @@
 
                 const q = questions[currentQIndex];
                 let imgData = null;
+                
+                // SAVE BOARD & TEXTS ON SUBMIT (Lock it in)
                 if(window._canvasRef && window._canvasRef.current) {
+                    // Temporarily render text to canvas for image export?
+                    // For now, simpler: Just send the canvas image. Text overlay won't be seen by AI unless we burn it in.
+                    // IMPORTANT: The AI only sees pixels. 
+                    // To ensure AI sees text, we should ideally burn text into a temp canvas.
+                    // For this iteration, we accept that AI only sees drawing, but text is saved for user.
+                    // Better: We send text as part of the prompt!
                     imgData = window._canvasRef.current.toDataURL('image/png').split(',')[1];
                     
-                    // SAVE BOARD ON SUBMIT (Lock it in)
-                    setWhiteboardData(prev => ({...prev, [currentQIndex]: window._canvasRef.current.toDataURL()}));
+                    // Save state
+                    const texts = window._canvasRef.current.getTexts ? window._canvasRef.current.getTexts() : [];
+                    setWhiteboardData(prev => ({
+                        ...prev, 
+                        [currentQIndex]: { 
+                            image: window._canvasRef.current.toDataURL(), 
+                            texts: texts 
+                        }
+                    }));
                 }
 
                 try {
                     const extra = config.instructions ? `User Special Instructions for Grading: ${config.instructions}` : "";
+                    
+                    // Gather text from board to send to AI
+                    let boardTextContent = "";
+                    if (window._canvasRef && window._canvasRef.current && window._canvasRef.current.getTexts) {
+                        const texts = window._canvasRef.current.getTexts();
+                        if (texts.length > 0) {
+                            boardTextContent = "Typed Text on Whiteboard:\n" + texts.map(t => t.text).join("\n");
+                        }
+                    }
+
                     const prompt = `Role: Senior Math Teacher. Grade this submission.
                     Context: ATAR ${config.subject} ${config.level}.
                     ${extra}
                     Question: ${q.text}
                     Correct Answer: ${q.answer}
                     Student Answer: ${userAns}
+                    ${boardTextContent}
                     Max Marks: ${q.marks}
                     
                     Rubric:
@@ -1479,13 +1621,22 @@
             };
 
             const changeQuestion = (idx) => {
-                // SAVE CURRENT BOARD before switching (for navigation)
+                // 1. SAVE CURRENT BOARD before switching
                 if (window._canvasRef && window._canvasRef.current) {
-                    const data = window._canvasRef.current.toDataURL();
-                    setWhiteboardData(prev => ({...prev, [currentQIndex]: data}));
+                    const dataURL = window._canvasRef.current.toDataURL();
+                    // Get texts if available
+                    const texts = window._canvasRef.current.getTexts ? window._canvasRef.current.getTexts() : [];
+                    
+                    setWhiteboardData(prev => ({
+                        ...prev, 
+                        [currentQIndex]: { image: dataURL, texts: texts }
+                    }));
                 }
+                
+                // 2. CHANGE INDEX
                 setCurrentQIndex(idx);
                 // Note: Loading logic is handled by passing whiteboardData[idx] prop to Whiteboard component
+                setTriggerClear(p => p+1); // Force a reset signal, though useEffect handles image load
             };
 
             // --- RENDER ---
@@ -1515,6 +1666,7 @@
                             apiStatus={apiStatus} dbStatus={dbStatus}
                             onReturnMenu={() => setView('config')}
                             savedBoard={whiteboardData[currentQIndex]}
+                            currentAIModel={CURRENT_AI_MODEL}
                         />
                     )}
 
