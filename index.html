@@ -321,7 +321,7 @@
         );
 
         // 2. Whiteboard
-        const Whiteboard = memo(({ tool, color, size, triggerClear, teacherMarks, getCanvasRef, savedBoard }) => {
+        const Whiteboard = memo(({ tool, color, size, triggerClear, teacherMarks, getCanvasRef, savedBoard, readOnly }) => {
             const canvasRef = useRef(null);
             const ctxRef = useRef(null);
             const [isDrawing, setIsDrawing] = useState(false);
@@ -333,13 +333,14 @@
                 // Initialize or Resize
                 const resize = () => {
                     const rect = canvas.getBoundingClientRect();
+                    // Set actual size in memory (scaled to account for device pixel ratio for sharpness if needed, but 1:1 is easier for save/load)
                     canvas.width = rect.width;
                     canvas.height = rect.height;
                     const ctx = canvas.getContext('2d');
                     ctx.lineCap = "round"; ctx.lineJoin = "round";
                     ctxRef.current = ctx;
                     
-                    // Re-draw saved content if exists (handle resize loss)
+                    // Restore if resizing (rare during test)
                     if(savedBoard) {
                         const img = new Image();
                         img.onload = () => ctx.drawImage(img, 0, 0, rect.width, rect.height);
@@ -350,9 +351,9 @@
                 resize();
                 window.addEventListener('resize', resize);
                 return () => window.removeEventListener('resize', resize);
-            }, [savedBoard]); // Re-run when savedBoard changes to load new question data
+            }, []);
 
-            // Restore Saved Board specifically when prop changes
+            // Restore Saved Board OR Clear on new question
             useEffect(() => {
                 const ctx = ctxRef.current;
                 const canvas = canvasRef.current;
@@ -364,10 +365,11 @@
                 if (savedBoard) {
                     const img = new Image();
                     img.onload = () => {
-                        ctx.drawImage(img, 0, 0); // Draw at 0,0 natural size
+                        ctx.drawImage(img, 0, 0); // Draw saved image
                     };
                     img.src = savedBoard;
                 }
+                // If savedBoard is undefined/null, the clearRect above ensures a blank board for new question
             }, [savedBoard]);
 
             useEffect(() => {
@@ -405,6 +407,7 @@
             };
 
             const start = (e) => {
+                if (readOnly) return; // Prevent drawing if read-only
                 const {x, y} = getPos(e);
                 ctxRef.current.beginPath(); 
                 ctxRef.current.moveTo(x, y);
@@ -412,7 +415,7 @@
             };
 
             const move = (e) => {
-                if(!isDrawing) return;
+                if(!isDrawing || readOnly) return; // Prevent drawing if read-only
                 const {x, y} = getPos(e);
                 const ctx = ctxRef.current;
                 if(tool==='eraser') { ctx.globalCompositeOperation = 'destination-out'; ctx.lineWidth = size*10; }
@@ -426,7 +429,7 @@
                     ref={canvasRef} 
                     onMouseDown={start} onMouseMove={move} onMouseUp={()=>setIsDrawing(false)} onMouseLeave={()=>setIsDrawing(false)} 
                     onTouchStart={start} onTouchMove={move} onTouchEnd={()=>setIsDrawing(false)} 
-                    className="w-full h-full cursor-crosshair touch-none"
+                    className={`w-full h-full touch-none ${readOnly ? 'cursor-not-allowed' : 'cursor-crosshair'}`}
                 />
             );
         });
@@ -792,6 +795,7 @@
             const q = questions[currentQIndex] || {};
             const isGraded = q.status === 'correct' || q.status === 'wrong' || q.status === 'partial';
             const isLastQ = currentQIndex === questions.length - 1;
+            const isReadOnly = isGraded; // Can't draw if graded
 
             // Auto switch to results when graded
             useEffect(() => {
@@ -888,10 +892,11 @@
                             triggerClear={triggerClear} teacherMarks={teacherMarks} 
                             getCanvasRef={(ref) => window._canvasRef = ref}
                             savedBoard={savedBoard}
+                            readOnly={isReadOnly}
                         />
 
                         {/* Top Overlay Tools */}
-                        <div className="absolute top-4 left-1/2 -translate-x-1/2 glass-panel px-6 py-3 rounded-full flex items-center gap-6 shadow-2xl z-30">
+                        <div className={`absolute top-4 left-1/2 -translate-x-1/2 glass-panel px-6 py-3 rounded-full flex items-center gap-6 shadow-2xl z-30 transition-opacity ${isReadOnly ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
                             <button onClick={()=>setWbTool('pen')} className={`${wbTool==='pen'?'text-cyan-400 drop-shadow-[0_0_5px_rgba(34,211,238,0.8)]':'text-slate-400'}`}><i className="fa-solid fa-pen"></i></button>
                             <button onClick={()=>setWbTool('eraser')} className={`${wbTool==='eraser'?'text-pink-400 drop-shadow-[0_0_5px_rgba(244,114,182,0.8)]':'text-slate-400'}`}><i className="fa-solid fa-eraser"></i></button>
                             <input type="color" value={wbColor} onChange={(e)=>setWbColor(e.target.value)} className="w-5 h-5 rounded-full bg-transparent border-none cursor-pointer" />
@@ -932,7 +937,7 @@
                         {/* Bottom Interaction Area */}
                         <div className="absolute bottom-10 left-1/2 -translate-x-1/2 w-full max-w-xl flex flex-col items-center gap-2 z-20">
                             {/* Math Keyboard */}
-                            {mathKbOpen && (
+                            {mathKbOpen && !isGraded && (
                                 <div className="w-full rounded-t-xl overflow-hidden shadow-2xl">
                                     <MathKeyboard 
                                         isOpen={mathKbOpen} setIsOpen={setMathKbOpen}
@@ -1246,7 +1251,9 @@
             // Clear board and marks when question changes
             useEffect(() => {
                 setTeacherMarks([]);
-                setTriggerClear(p => p+1);
+                // Trigger clear removed to allow component self-management via savedBoard prop change
+                // setTriggerClear(p => p+1); 
+                
                 // If there's an answer saved for this question, load it. Else clear.
                 setUserAns(questions[currentQIndex]?.userAns || "");
             }, [currentQIndex]);
@@ -1323,6 +1330,9 @@
                 let imgData = null;
                 if(window._canvasRef && window._canvasRef.current) {
                     imgData = window._canvasRef.current.toDataURL('image/png').split(',')[1];
+                    
+                    // SAVE BOARD ON SUBMIT (Lock it in)
+                    setWhiteboardData(prev => ({...prev, [currentQIndex]: window._canvasRef.current.toDataURL()}));
                 }
 
                 try {
@@ -1440,7 +1450,7 @@
             };
 
             const changeQuestion = (idx) => {
-                // SAVE CURRENT BOARD before switching
+                // SAVE CURRENT BOARD before switching (for navigation)
                 if (window._canvasRef && window._canvasRef.current) {
                     const data = window._canvasRef.current.toDataURL();
                     setWhiteboardData(prev => ({...prev, [currentQIndex]: data}));
